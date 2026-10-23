@@ -73,7 +73,11 @@
   function authError(e) {
     const m = (e && e.message) || "";
     if (/signups not allowed|not found|user not found/i.test(m)) return "このメールアドレスは登録されていません。招待されたアドレスを入力してください。";
-    if (/rate|seconds|too many/i.test(m)) return "短時間に何度も送信されました。1分ほど待ってからもう一度お試しください。";
+    const sec = m.match(/after (\d+) seconds?/i);
+    if (sec) return "続けて送信できません。" + sec[1] + "秒ほど待ってから、もう一度お試しください。";
+    if ((e && e.code === "over_email_send_rate_limit") || /email rate limit/i.test(m))
+      return "ログイン用メールの送信数が上限に達しました(1時間あたりの上限)。1時間ほど待ってからお試しください。すでに届いているログインメールがあれば、そのリンクを開いてもログインできます。";
+    if (/rate|too many/i.test(m)) return "短時間に何度も送信されました。しばらく待ってからもう一度お試しください。";
     return "メールを送れませんでした(" + m + ")。";
   }
 
