@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>【試験】Lazurite 運営ボード</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="test-banner" role="note">試験環境です。ここでの操作は本番のデータに影響しません。</div>
+<div class="app">
+
+  <!-- ログイン画面 -->
+  <section id="login" class="login" hidden>
+    <div class="login-card">
+      <h1 class="brand">Lazurite 運営ボード</h1>
+      <p class="muted">登録済みのメールアドレスでログインします。</p>
+
+      <div id="step-email" class="stack">
+        <label for="email">メールアドレス</label>
+        <input id="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+        <button id="send-code" class="btn" type="button">ログイン用メールを送る</button>
+      </div>
+
+      <div id="step-code" class="stack" hidden>
+        <p class="note">メールを送りました。届いたメールの<b>リンクを押す</b>か、<b>6桁のコード</b>を下に入力してください。</p>
+        <label for="code">6桁のコード</label>
+        <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456">
+        <button id="verify-code" class="btn" type="button">ログイン</button>
+        <button id="back-email" class="link" type="button">メールアドレスを入れ直す</button>
+      </div>
+
+      <p id="login-msg" class="msg" role="status"></p>
+    </div>
+  </section>
+
+  <!-- メイン画面 -->
+  <section id="main" hidden>
+    <header class="top">
+      <div class="top-row">
+        <h1 class="brand small">Lazurite 運営ボード</h1>
+        <div class="who"><span id="who"></span><button id="logout" class="link" type="button">ログアウト</button></div>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-dash" aria-selected="true">売上ダッシュボード</button>
+        <button type="button" role="tab" id="tab-todo" aria-selected="false">予約メモ・Todo</button>
+      </nav>
+      <div class="chips" id="prop-chips" aria-label="施設"></div>
+    </header>
+
+    <p id="main-msg" class="msg" role="status"></p>
+
+    <!-- ダッシュボード -->
+    <div id="view-dash">
+      <p id="dash-lede" class="lede"></p>
+      <div class="tiles" id="tiles"></div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>月別の宿泊売上</h2>
+          <p class="sub">チャネル別の積み上げ。清掃費は含みません。</p>
+          <div class="legend" id="rev-legend"></div>
+          <div class="chart" id="rev-chart"></div>
+        </div>
+        <div class="card">
+          <h2>月別の稼働率</h2>
+          <p class="sub">営業日数に対する販売泊数の割合。今月は今日以降の予約済み分を含みます。</p>
+          <div class="chart" id="occ-chart"></div>
+        </div>
+      </div>
+
+      <div class="card" id="prop-card">
+        <h2>施設別の比較</h2>
+        <p class="sub">行をタップするとその施設に絞り込みます。</p>
+        <div class="table-wrap"><table id="prop-table"></table></div>
+      </div>
+
+      <div class="card">
+        <h2>チャネル別の比較</h2>
+        <p class="sub">今年の累計(キャンセルを除く)。</p>
+        <div class="table-wrap"><table id="ch-table"></table></div>
+      </div>
+    </div>
+
+    <!-- 予約メモ・Todo -->
+    <div id="view-todo" hidden>
+      <div class="stats" id="todo-stats"></div>
+      <div class="subtabs">
+        <button type="button" id="sub-res" aria-pressed="true">予約ごと</button>
+        <button type="button" id="sub-list" aria-pressed="false">Todo一覧</button>
+        <input id="q" class="search" type="search" placeholder="予約ID・メモ・Todoで検索" aria-label="検索">
+        <label class="toggle"><input type="checkbox" id="past"> 過去の予約も表示</label>
+      </div>
+      <div id="todo-view" class="list"></div>
+    </div>
+
+    <footer class="foot" id="foot"></footer>
+  </section>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
