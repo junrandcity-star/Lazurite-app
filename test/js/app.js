@@ -141,6 +141,7 @@
   // ---------- tabs & chips ----------
   $("tab-dash").onclick = () => { S.tab = "dash"; render(); };
   $("tab-todo").onclick = () => { S.tab = "todo"; render(); };
+  $("go-todo").onclick = () => { S.tab = "todo"; render(); window.scrollTo(0, 0); };
   function renderChips() {
     const names = [ALL, ...S.props.map((p) => p.name)];
     $("prop-chips").replaceChildren(...names.map((n) => {
