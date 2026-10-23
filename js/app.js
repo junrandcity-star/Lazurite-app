@@ -141,6 +141,20 @@
   // ---------- tabs & chips ----------
   $("tab-dash").onclick = () => { S.tab = "dash"; render(); };
   $("tab-todo").onclick = () => { S.tab = "todo"; render(); };
+  // アプリ一覧(右上のボタンで開閉)
+  const appsBtn = $("apps-btn"), appsPanel = $("apps-panel");
+  const placeApps = () => {
+    const r = appsBtn.getBoundingClientRect(), w = Math.min(460, innerWidth - 32);
+    appsPanel.style.top = Math.round(r.bottom + 8) + "px";
+    appsPanel.style.left = Math.round(Math.max(16, Math.min(r.right - w, innerWidth - 16 - w))) + "px";
+  };
+  window.addEventListener("resize", () => { if (!appsPanel.hidden) placeApps(); });
+  const setApps = (open) => { if (open) placeApps(); appsPanel.hidden = !open; appsBtn.setAttribute("aria-expanded", String(open)); appsBtn.setAttribute("aria-label", open ? "アプリ一覧を閉じる" : "アプリ一覧を開く"); };
+  appsBtn.onclick = (e) => { e.stopPropagation(); setApps(appsPanel.hidden); };
+  appsPanel.addEventListener("click", (e) => { e.stopPropagation(); if (e.target.closest("a.app-tile, button.app-tile")) setApps(false); });
+  document.addEventListener("click", () => setApps(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !appsPanel.hidden) { setApps(false); appsBtn.focus(); } });
+  $("go-todo").onclick = () => { S.tab = "todo"; render(); window.scrollTo(0, 0); };
   function renderChips() {
     const names = [ALL, ...S.props.map((p) => p.name)];
     $("prop-chips").replaceChildren(...names.map((n) => {
