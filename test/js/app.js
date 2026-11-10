@@ -184,7 +184,8 @@
     const year = cur.slice(0, 4);
     const firstData = S.nights.reduce((m, n) => (n.stay_date < m ? n.stay_date : m), "9999-12-31").slice(0, 7);
     let start = year + "-01"; if (firstData > start) start = firstData;
-    const months = []; for (let m = start; m <= lastData; m = nextMonth(m)) months.push(m);
+    let until = cur; for (let k = 0; k < 6; k++) until = nextMonth(until);           // 先の予約は6か月先まで表示
+    const months = []; for (let m = start; m <= lastData && m <= until; m = nextMonth(m)) months.push(m);
 
     const openDays = (p, m) => {
       const last = m + "-" + String(daysIn(m)).padStart(2, "0");
