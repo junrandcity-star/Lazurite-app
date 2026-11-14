@@ -16,9 +16,10 @@
   const CHAN = { airbnb: "Airbnb", "booking.com": "Booking.com", "trip.com": "Trip.com" };
   const CH_KEYS = ["airbnb", "booking.com", "trip.com"];
   const CH_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)"];
+  const P_COLORS = ["var(--p1)", "var(--p2)", "var(--p3)", "var(--p4)", "var(--p5)", "var(--p6)", "var(--p7)", "var(--p8)"];
 
   const S = {
-    user: null, loaded: false, tab: "dash", prop: ALL,
+    user: null, loaded: false, tab: "dash", prop: ALL, period: "cur", metric: "sales",
     props: [], res: [], nights: [], memos: {}, todos: [],
     sub: "res", q: "", past: false, open: null, limit: 40, confirmDel: null,
   };
@@ -33,6 +34,8 @@
   const md = (s) => (s ? Number(s.slice(5, 7)) + "/" + Number(s.slice(8, 10)) : "");
   const wd = (s) => "日月火水木金土"[new Date(s + "T00:00:00Z").getUTCDay()];
   const mLabel = (m) => Number(m.slice(5, 7)) + "月";
+  const axisLabel = (m) => (m.endsWith("-01") ? m.slice(0, 4) : mLabel(m));   // 1月は年を表示
+  const ymLabel = (m) => m.slice(0, 4) + "年" + mLabel(m);
   const daysIn = (m) => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate();
   const nextMonth = (m) => { let y = +m.slice(0, 4), mo = +m.slice(5, 7) + 1; if (mo > 12) { y++; mo = 1; } return y + "-" + String(mo).padStart(2, "0"); };
   const prevMonth = (m) => { let y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1; if (mo < 1) { y--; mo = 12; } return y + "-" + String(mo).padStart(2, "0"); };
@@ -111,15 +114,15 @@
     try {
       const [props, res, nights] = await Promise.all([
         fetchAll("properties", "id,name,rooms,open_date", ["id"]),
-        fetchAll("reservations", "id,property_id,external_id,channel,status,check_in,check_out,nights,room_revenue,cleaning_fee,penalty_fee", ["id"]),
+        fetchAll("reservations", "id,property_id,external_id,channel,status,check_in,check_out,nights,room_revenue,cleaning_fee,penalty_fee,payout", ["id"]),
         fetchAll("nightly_sales", "reservation_id,stay_date,room_revenue", ["reservation_id", "stay_date"]),
       ]);
       S.props = props.sort((a, b) => a.name.localeCompare(b.name));
-      S.res = res; S.nights = nights;
+      S.res = res; S.nights = nights; S._pay = null;
       await loadNotes();
       S.loaded = true;
       msg("main-msg", "");
-      $("foot").textContent = "予約データ:" + res.length + "件(エアホストCSVから取り込み)。数字は1泊ごとの宿泊料金(清掃費・キャンセル料を除く)で計算しています。";
+      $("foot").textContent = "予約データ:" + res.length + "件(Beds24・エアホスト・各OTAの実績から取り込み)。売上は宿泊料+清掃費(キャンセル料は含みません)。清掃費はチェックイン日の月に計上。ADR・RevPARは宿泊料で計算。2025年以前のBooking.com分の一部は宿泊料に清掃費が含まれています。";
       render();
     } catch (e) {
       msg("main-msg", "データを読み込めませんでした。時間をおいて再読み込みしてください。(" + (e.message || e) + ")");
@@ -155,12 +158,18 @@
   document.addEventListener("click", () => setApps(false));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !appsPanel.hidden) { setApps(false); appsBtn.focus(); } });
   $("go-todo").onclick = () => { S.tab = "todo"; render(); window.scrollTo(0, 0); };
+  $("prop-all").onclick = () => { S.prop = ALL; S.limit = 40; render(); };
+  $("prop-sel").onchange = (e) => { S.prop = e.target.value || ALL; S.limit = 40; render(); };
+  document.querySelectorAll("#period-seg button").forEach((b) => (b.onclick = () => { S.period = b.dataset.v; render(); }));
+  document.querySelectorAll("#metric-seg button").forEach((b) => (b.onclick = () => { S.metric = b.dataset.v; render(); }));
   function renderChips() {
-    const names = [ALL, ...S.props.map((p) => p.name)];
-    $("prop-chips").replaceChildren(...names.map((n) => {
-      const b = el("button", "chip", n); b.type = "button"; b.setAttribute("aria-pressed", String(n === S.prop));
-      b.onclick = () => { S.prop = n; S.limit = 40; render(); }; return b;
-    }));
+    $("prop-all").setAttribute("aria-pressed", String(S.prop === ALL));
+    const sel = $("prop-sel");
+    const opts = [el("option", "", "施設を選ぶ…")]; opts[0].value = "";
+    S.props.forEach((p) => { const o = el("option", "", p.name); o.value = p.name; opts.push(o); });
+    sel.replaceChildren(...opts); sel.value = S.prop === ALL ? "" : S.prop; sel.classList.toggle("on", S.prop !== ALL);
+    document.querySelectorAll("#period-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === S.period)));
+    document.querySelectorAll("#metric-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === S.metric)));
   }
 
   function render() {
@@ -173,6 +182,46 @@
     if (S.tab === "dash") renderDash(); else renderTodo();
   }
 
+  // ---------- 入金日(営業日)----------
+  // 土日・祝日・年末年始(12/31〜1/3)は銀行休業日として翌営業日に送る
+  const HOLIDAYS = new Set([
+    "2025-01-01", "2025-01-02", "2025-01-03", "2025-01-13", "2025-02-11", "2025-02-24", "2025-03-20", "2025-04-29", "2025-05-05", "2025-05-06",
+    "2025-07-21", "2025-08-11", "2025-09-15", "2025-09-23", "2025-10-13", "2025-11-03", "2025-11-24", "2025-12-31",
+    "2026-01-01", "2026-01-02", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20", "2026-04-29", "2026-05-04", "2026-05-05", "2026-05-06",
+    "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23", "2026-10-12", "2026-11-03", "2026-11-23", "2026-12-31",
+    "2027-01-01", "2027-01-11", "2027-02-11", "2027-02-23", "2027-03-22", "2027-04-29", "2027-05-03", "2027-05-04", "2027-05-05",
+    "2027-07-19", "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03", "2027-11-23", "2027-12-31",
+    "2028-01-03",
+  ]);
+  const isBiz = (d) => { const w = new Date(d + "T00:00:00Z").getUTCDay(); return w !== 0 && w !== 6 && !HOLIDAYS.has(d) && !/-01-0[1-3]$/.test(d); };
+  const bizOnOrAfter = (d) => { while (!isBiz(d)) d = addDays(d, 1); return d; };
+  const nextBiz = (d) => bizOnOrAfter(addDays(d, 1));
+  function payDate(r) {
+    if (r.channel === "airbnb") return nextBiz(r.check_in);                       // Airbnbはチェックイン翌日に送金
+    if (r.channel === "booking.com") return bizOnOrAfter(nextMonth(r.check_out.slice(0, 7)) + "-01"); // 翌月1日
+    return nextBiz(r.check_out);                                                    // Trip.com・その他
+  }
+  const sales = (r) => Number(r.room_revenue || 0) + Number(r.cleaning_fee || 0);
+  // 受取額:記録があればそれ、無ければ同チャネルの近い時期の手数料率(中央値)から推計
+  function payouts() {
+    if (S._pay) return S._pay;
+    const live = S.res.filter((r) => r.status !== "cancelled" && r.check_out && sales(r) > 0);
+    const known = {};
+    live.forEach((r) => { if (Number(r.payout) > 0) (known[r.channel] || (known[r.channel] = [])).push([r.check_in, Number(r.payout) / sales(r)]); });
+    const med = (a) => { const v = a.map((x) => x[1]).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
+    const DEFAULT = { airbnb: 0.845, "booking.com": 0.857 };
+    const rate = (r) => {
+      const k = known[r.channel] || [];
+      const near = k.filter((x) => Math.abs(new Date(x[0]) - new Date(r.check_in)) <= 60 * 864e5);
+      return (near.length >= 3 ? med(near) : med(k)) || DEFAULT[r.channel] || 1;
+    };
+    S._pay = live.map((r) => {
+      const est = !(Number(r.payout) > 0);
+      return { r, date: payDate(r), amount: est ? sales(r) * rate(r) : Number(r.payout), est };
+    });
+    return S._pay;
+  }
+
   // ============================================================
   // ダッシュボード
   // ============================================================
@@ -183,9 +232,14 @@
     const cur = lastData >= thisMonth ? thisMonth : lastData;           // 今月(データがあれば)/最新月
     const year = cur.slice(0, 4);
     const firstData = S.nights.reduce((m, n) => (n.stay_date < m ? n.stay_date : m), "9999-12-31").slice(0, 7);
-    let start = year + "-01"; if (firstData > start) start = firstData;
-    let until = cur; for (let k = 0; k < 6; k++) until = nextMonth(until);           // 先の予約は6か月先まで表示
-    const months = []; for (let m = start; m <= lastData && m <= until; m = nextMonth(m)) months.push(m);
+    let start = cur; for (let k = 0; k < 11; k++) start = prevMonth(start);         // 過去12か月
+    if (firstData > start) start = firstData;
+    let until = cur; for (let k = 0; k < 6; k++) until = nextMonth(until);           // 先の予約は6か月先まで
+    const months = []; for (let m = start; m <= until; m = nextMonth(m)) months.push(m);
+    const minus12 = (m) => (+m.slice(0, 4) - 1) + m.slice(4);
+    const all = new Set(months); months.forEach((m) => all.add(minus12(m)));
+    for (let m = year + "-01"; m <= cur; m = nextMonth(m)) all.add(m);
+    all.add(prevMonth(cur));
 
     const openDays = (p, m) => {
       const last = m + "-" + String(daysIn(m)).padStart(2, "0");
@@ -199,28 +253,36 @@
       const set = new Set(propIds);
       const props = S.props.filter((p) => set.has(p.id));
       const byMonth = {};
-      const blank = (m) => ({ month: m, nights: 0, revenue: 0, airbnb: 0, "booking.com": 0, "trip.com": 0, other: 0, bookings: 0, days: props.reduce((s, p) => s + openDays(p, m), 0) });
-      for (const m of months) byMonth[m] = blank(m);
-      if (!byMonth[prevMonth(start)]) byMonth[prevMonth(start)] = blank(prevMonth(start));
+      const blank = (m) => ({ month: m, nights: 0, revenue: 0, clean: 0, sales: 0, airbnb: 0, "booking.com": 0, "trip.com": 0, other: 0, bookings: 0, pay: 0, payEst: 0, payCh: {}, days: props.reduce((s, p) => s + openDays(p, m), 0) });
+      for (const m of all) byMonth[m] = blank(m);
+      const chKey = (c) => (CH_KEYS.includes(c) ? c : "other");
       for (const n of S.nights) {
         const r = resById[n.reservation_id]; if (!r || !set.has(r.property_id)) continue;
-        const m = n.stay_date.slice(0, 7); if (!byMonth[m]) continue;
-        const v = Number(n.room_revenue); const x = byMonth[m];
-        x.nights++; x.revenue += v;
-        if (CH_KEYS.includes(r.channel)) x[r.channel] += v; else x.other += v;
+        const x = byMonth[n.stay_date.slice(0, 7)]; if (!x) continue;
+        const v = Number(n.room_revenue);
+        x.nights++; x.revenue += v; x[chKey(r.channel)] += v;
       }
       for (const r of S.res) {
         if (!set.has(r.property_id) || r.status === "cancelled") continue;
-        const m = r.check_in.slice(0, 7); if (byMonth[m]) byMonth[m].bookings++;
+        const x = byMonth[r.check_in.slice(0, 7)]; if (!x) continue;
+        x.bookings++;
+        const c = Number(r.cleaning_fee || 0); if (r.nights > 0 && c) { x.clean += c; x[chKey(r.channel)] += c; }
+      }
+      for (const p of payouts()) {
+        if (!set.has(p.r.property_id)) continue;
+        const x = byMonth[p.date.slice(0, 7)]; if (!x) continue;
+        x.pay += p.amount; if (p.est) x.payEst += p.amount;
+        const k = chKey(p.r.channel); x.payCh[k] = (x.payCh[k] || 0) + p.amount;
       }
       for (const x of Object.values(byMonth)) {
+        x.sales = x.revenue + x.clean;
         x.occ = x.days ? x.nights / x.days : null;
         x.adr = x.nights ? x.revenue / x.nights : null;
         x.revpar = x.days ? x.revenue / x.days : null;
       }
-      const ytdMonths = months.filter((m) => m <= cur && m.slice(0, 4) === year);
+      const ytdMonths = []; for (let m = year + "-01"; m <= cur; m = nextMonth(m)) ytdMonths.push(m);
       const sum = (k) => ytdMonths.reduce((s, m) => s + byMonth[m][k], 0);
-      const ytd = { nights: sum("nights"), revenue: sum("revenue"), days: sum("days"), bookings: sum("bookings") };
+      const ytd = { nights: sum("nights"), revenue: sum("revenue"), clean: sum("clean"), sales: sum("sales"), days: sum("days"), bookings: sum("bookings"), pay: sum("pay") };
       ytd.occ = ytd.days ? ytd.nights / ytd.days : null;
       ytd.adr = ytd.nights ? ytd.revenue / ytd.nights : null;
       ytd.revpar = ytd.days ? ytd.revenue / ytd.days : null;
@@ -228,16 +290,29 @@
       for (const r of S.res) {
         if (!set.has(r.property_id) || r.status === "cancelled") continue;
         if (r.check_in.slice(0, 4) !== year || r.check_in.slice(0, 7) > cur) continue;
-        const c = ytd.byCh[r.channel] || (ytd.byCh[r.channel] = { bookings: 0, nights: 0, revenue: 0 });
-        c.bookings++; c.nights += r.nights; c.revenue += Number(r.room_revenue);
+        const c = ytd.byCh[r.channel] || (ytd.byCh[r.channel] = { bookings: 0, nights: 0, revenue: 0, sales: 0 });
+        c.bookings++; c.nights += r.nights; c.revenue += Number(r.room_revenue); c.sales += sales(r);
       }
       ytd.cancels = S.res.filter((r) => set.has(r.property_id) && r.status === "cancelled" && r.check_in.slice(0, 4) === year).length;
-      return { byMonth, ytd, cur: byMonth[cur], prev: byMonth[prevMonth(cur)] };
+      // 今月の入金:今日までに入金済み/これから
+      const payNow = { done: 0, todo: 0 };
+      for (const p of payouts()) {
+        if (!set.has(p.r.property_id) || p.date.slice(0, 7) !== cur) continue;
+        if (p.date <= today) payNow.done += p.amount; else payNow.todo += p.amount;
+      }
+      return { byMonth, ytd, cur: byMonth[cur], prev: byMonth[prevMonth(cur)], payNow };
     }
 
     const selIds = S.prop === ALL ? S.props.map((p) => p.id) : S.props.filter((p) => p.name === S.prop).map((p) => p.id);
-    return { months, cur, year, lastData, calc, sel: calc(selIds), propById };
+    return { months, cur, year, lastData, calc, sel: calc(selIds), propById, minus12 };
   }
+
+  const METRIC = {
+    sales: { lab: "売上(清掃費込み)", fmt: (v) => yen(v), axis: yenShort },
+    occ: { lab: "稼働率", fmt: pct, axis: (v) => Math.round(v * 100) + "%", yMax: 1 },
+    adr: { lab: "ADR(宿泊料÷販売泊数)", fmt: (v) => yen(v), axis: yenShort },
+    revpar: { lab: "RevPAR(宿泊料÷営業日数)", fmt: (v) => yen(v), axis: yenShort },
+  };
 
   function renderDash() {
     const M = metrics();
@@ -249,15 +324,17 @@
     const c = sel.cur, p = sel.prev, y = sel.ytd;
     const chg = (a, b) => (a == null || !b ? null : a / b - 1);
     const tiles = [
-      { lab: "宿泊売上(清掃費除く)", val: yen(c.revenue), d: chg(c.revenue, p && p.revenue), unit: "%", cum: yen(y.revenue) },
+      { lab: "売上(清掃費込み)", val: yen(c.sales), d: chg(c.sales, p && p.sales), unit: "%", cum: yen(y.sales), note: "宿泊料 " + yen(c.revenue) + "・清掃費 " + yen(c.clean) },
       { lab: "稼働率", val: pct(c.occ), d: c.occ != null && p && p.occ != null ? c.occ - p.occ : null, unit: "pt", cum: pct(y.occ) },
-      { lab: "ADR(平均1泊単価)", val: yen(c.adr), d: chg(c.adr, p && p.adr), unit: "%", cum: yen(y.adr) },
-      { lab: "RevPAR", val: yen(c.revpar), d: chg(c.revpar, p && p.revpar), unit: "%", cum: yen(y.revpar) },
+      { lab: "ADR(平均1泊単価)", val: yen(c.adr), d: chg(c.adr, p && p.adr), unit: "%", cum: yen(y.adr), note: "宿泊料ベース" },
+      { lab: "RevPAR", val: yen(c.revpar), d: chg(c.revpar, p && p.revpar), unit: "%", cum: yen(y.revpar), note: "宿泊料ベース" },
       { lab: "予約件数(チェックイン)", val: c.bookings + "件", d: p ? c.bookings - p.bookings : null, unit: "件", cum: y.bookings + "件(キャンセル " + y.cancels + "件)" },
+      { lab: mLabel(cur) + "の入金予定額", val: yen(c.pay), d: null, cum: yen(y.pay), note: isNow ? "入金済み " + yen(sel.payNow.done) + "・これから " + yen(sel.payNow.todo) : "手数料差引後" },
     ];
     $("tiles").replaceChildren(...tiles.map((t) => {
       const box = el("div", "tile");
       box.append(el("div", "lab", t.lab), el("div", "val", t.val));
+      if (t.note) box.append(el("div", "tnote", t.note));
       const d = el("div", "delta");
       if (t.d != null && isFinite(t.d)) {
         const n = t.unit === "件" ? t.d : t.d * 100;
@@ -268,56 +345,146 @@
       box.append(d, cum); return box;
     }));
 
-    // charts
     const rows = M.months.map((m) => sel.byMonth[m]);
+    const swatch = (color, name) => { const s = el("span"); const w = el("i", "sw"); w.style.background = color; s.append(w, document.createTextNode(name)); return s; };
+    const lineKey = (color, name, dash) => { const s = el("span"); const w = el("i", "ln" + (dash ? " dash" : "")); w.style.borderColor = color; s.append(w, document.createTextNode(name)); return s; };
+
+    // 売上(清掃費込み)
     const present = CH_KEYS.filter((k) => rows.some((r) => r[k]));
-    $("rev-legend").replaceChildren(...present.map((k) => { const s = el("span"); const w = el("i", "sw"); w.style.background = CH_COLORS[CH_KEYS.indexOf(k)]; s.append(w, document.createTextNode(CHAN[k])); return s; }));
+    const hasOther = rows.some((r) => r.other);
+    $("rev-legend").replaceChildren(...present.map((k) => swatch(CH_COLORS[CH_KEYS.indexOf(k)], CHAN[k])), ...(hasOther ? [swatch("var(--muted)", "その他")] : []));
     barChart($("rev-chart"), rows, {
-      keys: present.concat(rows.some((r) => r.other) ? ["other"] : []),
+      keys: present.concat(hasOther ? ["other"] : []),
       colors: present.map((k) => CH_COLORS[CH_KEYS.indexOf(k)]).concat(["var(--muted)"]),
       fmtAxis: yenShort,
-      tip: (r) => [...present.filter((k) => r[k]).map((k) => [CH_COLORS[CH_KEYS.indexOf(k)], CHAN[k], yen(r[k])]), [null, "合計", yen(r.revenue)]],
-      future: (r) => r.month > thisMonth,
-    });
-    barChart($("occ-chart"), rows, {
-      keys: ["occ"], colors: ["var(--s1)"], yMax: 1, fmtAxis: (v) => Math.round(v * 100) + "%",
-      tip: (r) => (r.days ? [[null, "稼働率", pct(r.occ)], [null, "販売泊数", r.nights + " / " + r.days + "日"], [null, "ADR", yen(r.adr)]] : [[null, "", "営業開始前"]]),
+      tip: (r) => [...present.filter((k) => r[k]).map((k) => [CH_COLORS[CH_KEYS.indexOf(k)], CHAN[k], yen(r[k])]), ...(r.other ? [["var(--muted)", "その他", yen(r.other)]] : []),
+        [null, "合計", yen(r.sales)], [null, "うち宿泊料", yen(r.revenue)], [null, "うち清掃費", yen(r.clean)]],
       future: (r) => r.month > thisMonth,
     });
 
-    // property table
+    // 稼働率(折れ線、点線は前年同月)
+    $("occ-legend").replaceChildren(lineKey("var(--s1)", "稼働率"), lineKey("var(--muted)", "前年同月", true));
+    lineChart($("occ-chart"), M.months, [
+      { name: "稼働率", color: "var(--s1)", values: rows.map((r) => (r.days ? r.occ : null)) },
+      { name: "前年同月", color: "var(--muted)", dash: true, values: M.months.map((m) => { const x = sel.byMonth[M.minus12(m)]; return x && x.days ? x.occ : null; }) },
+    ], { yMax: 1, fmtAxis: (v) => Math.round(v * 100) + "%", fmt: pct,
+      extra: (i) => { const r = rows[i]; return r.days ? [[null, "販売泊数", r.nights + " / " + r.days + "日"]] : [[null, "", "営業開始前"]]; } });
+
+    // 入金予定額
+    const payKeys = CH_KEYS.filter((k) => rows.some((r) => r.payCh[k])).concat(rows.some((r) => r.payCh.other) ? ["other"] : []);
+    const payColor = (k) => (k === "other" ? "var(--muted)" : CH_COLORS[CH_KEYS.indexOf(k)]);
+    const payName = (k) => (k === "other" ? "その他" : CHAN[k]);
+    $("pay-legend").replaceChildren(...payKeys.map((k) => swatch(payColor(k), payName(k))));
+    const payRows = rows.map((r) => Object.assign({ month: r.month }, r.payCh));
+    barChart($("pay-chart"), payRows, {
+      keys: payKeys, colors: payKeys.map(payColor), fmtAxis: yenShort,
+      tip: (pr) => { const r = sel.byMonth[pr.month]; return [...payKeys.filter((k) => r.payCh[k]).map((k) => [payColor(k), payName(k), yen(r.payCh[k])]), [null, "合計", yen(r.pay)], ...(r.payEst ? [[null, "うち推計", yen(r.payEst)]] : [])]; },
+      future: (r) => r.month > thisMonth,
+    });
+
+    // 施設別の比較
     const pt = $("prop-table");
+    const per = S.period === "ytd" ? "ytd" : "cur";
     const head = el("thead"); const hr = el("tr");
-    [["施設", ""], [mLabel(cur) + "の売上", "num"], [mLabel(cur) + "の稼働率", "num"], ["累計売上", "num"], ["累計稼働率", "num hide-narrow"], ["ADR", "num hide-narrow"], ["予約件数", "num hide-narrow"]]
-      .forEach(([t, c2]) => { const th = el("th", c2, t); hr.append(th); });
+    [["施設", ""], ["売上", "num"], ["稼働率", "num"], ["ADR", "num"], ["RevPAR", "num"], ["予約件数", "num hide-narrow"]].forEach(([t, c2]) => hr.append(el("th", c2, t)));
     head.append(hr);
     const body = el("tbody");
-    const prows = S.props.map((p) => ({ p, m: M.calc([p.id]) })).sort((a, b) => b.m.ytd.revenue - a.m.ytd.revenue);
-    const maxRev = Math.max(1, ...prows.map((x) => x.m.ytd.revenue));
-    prows.forEach(({ p, m }) => {
+    const prows = S.props.map((p) => ({ p, m: M.calc([p.id]) })).map((x) => Object.assign(x, { v: per === "ytd" ? x.m.ytd : x.m.cur })).sort((a, b) => b.v.sales - a.v.sales);
+    const maxRev = Math.max(1, ...prows.map((x) => x.v.sales));
+    prows.forEach(({ p, v }) => {
       const tr = el("tr"); if (p.name === S.prop) tr.className = "sel";
       tr.onclick = () => { S.prop = S.prop === p.name ? ALL : p.name; render(); };
-      tr.append(el("td", "", p.name), el("td", "num", yen(m.cur.revenue)), el("td", "num", pct(m.cur.occ)));
-      const td = el("td", "num"); const bc = el("div", "bar-cell"); const bar = el("i"); bar.style.width = Math.round((m.ytd.revenue / maxRev) * 56) + "px";
-      bc.append(bar, document.createTextNode(yen(m.ytd.revenue))); td.append(bc); tr.append(td);
-      tr.append(el("td", "num hide-narrow", pct(m.ytd.occ)), el("td", "num hide-narrow", yen(m.ytd.adr)), el("td", "num hide-narrow", m.ytd.bookings + "件"));
+      tr.append(el("td", "", p.name));
+      const td = el("td", "num"); const bc = el("div", "bar-cell"); const bar = el("i"); bar.style.width = Math.round((v.sales / maxRev) * 56) + "px";
+      bc.append(bar, document.createTextNode(yen(v.sales))); td.append(bc); tr.append(td);
+      tr.append(el("td", "num", pct(v.occ)), el("td", "num", yen(v.adr)), el("td", "num", yen(v.revpar)), el("td", "num hide-narrow", v.bookings + "件"));
       body.append(tr);
     });
-    pt.replaceChildren(head, body);
+    const tot = per === "ytd" ? sel.ytd : sel.cur;
+    const foot = el("tfoot"); const fr = el("tr", "total");
+    fr.append(el("td", "", S.prop === ALL ? "全施設" : "選択中"), el("td", "num", yen(tot.sales)), el("td", "num", pct(tot.occ)), el("td", "num", yen(tot.adr)), el("td", "num", yen(tot.revpar)), el("td", "num hide-narrow", tot.bookings + "件"));
+    foot.append(fr);
+    pt.replaceChildren(head, body, foot);
 
-    // channel table
+    // 施設別の推移
+    const mt = METRIC[S.metric] || METRIC.sales;
+    $("trend-sub").textContent = mt.lab + "の月別推移。施設を選ぶと、その施設の線が強調されます。凡例の施設名をタップしても選べます。";
+    const perProp = S.props.map((pp, i) => ({ pp, color: P_COLORS[i] || "var(--muted)", m: M.calc([pp.id]) }));
+    $("trend-legend").replaceChildren(...perProp.map(({ pp, color }) => {
+      const b = el("button"); b.type = "button"; const w = el("i", "ln"); w.style.borderColor = color;
+      b.append(w, document.createTextNode(pp.name)); if (S.prop !== ALL && S.prop !== pp.name) b.className = "off";
+      b.onclick = () => { S.prop = S.prop === pp.name ? ALL : pp.name; render(); }; return b;
+    }));
+    lineChart($("trend-chart"), M.months, perProp.map(({ pp, color, m }) => ({
+      name: pp.name, color, faded: S.prop !== ALL && S.prop !== pp.name, bold: S.prop === pp.name,
+      values: M.months.map((mm) => { const x = m.byMonth[mm]; return x.days ? x[S.metric] : null; }),
+    })), { yMax: mt.yMax, fmtAxis: mt.axis, fmt: mt.fmt, sortTip: true });
+
+    // チャネル別の比較
     const ct = $("ch-table");
     const h2 = el("thead"); const r2 = el("tr");
-    [["チャネル", ""], ["予約件数", "num"], ["泊数", "num"], ["平均泊数", "num"], ["宿泊売上", "num"], ["ADR", "num"]].forEach(([t, c2]) => r2.append(el("th", c2, t)));
+    [["チャネル", ""], ["予約件数", "num"], ["泊数", "num"], ["平均泊数", "num hide-narrow"], ["売上(清掃費込み)", "num"], ["ADR", "num"]].forEach(([t, c2]) => r2.append(el("th", c2, t)));
     h2.append(r2);
     const b2 = el("tbody");
-    Object.entries(y.byCh).sort((a, b) => b[1].revenue - a[1].revenue).forEach(([k, v]) => {
+    Object.entries(y.byCh).sort((a, b) => b[1].sales - a[1].sales).forEach(([k, v]) => {
       const tr = el("tr");
-      tr.append(el("td", "", CHAN[k] || k), el("td", "num", v.bookings + "件"), el("td", "num", v.nights + "泊"),
-        el("td", "num", (v.nights / v.bookings).toFixed(1) + "泊"), el("td", "num", yen(v.revenue)), el("td", "num", yen(v.nights ? v.revenue / v.nights : null)));
+      tr.append(el("td", "", CHAN[k] || (k === "direct" ? "直接・手入力" : k)), el("td", "num", v.bookings + "件"), el("td", "num", v.nights + "泊"),
+        el("td", "num hide-narrow", (v.nights / v.bookings).toFixed(1) + "泊"), el("td", "num", yen(v.sales)), el("td", "num", yen(v.nights ? v.revenue / v.nights : null)));
       b2.append(tr);
     });
     ct.replaceChildren(h2, b2);
+  }
+
+  // 折れ線グラフ(SVG)。値が null の月は線を切る。ホバーで縦線+その月の値
+  function lineChart(box, months, series, o) {
+    box.replaceChildren();
+    const W = Math.max(300, box.clientWidth || 300), H = 230, mb = 22, mt = 10;
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("role", "img");
+    const vals = series.flatMap((s) => s.values.filter((v) => v != null));
+    let max = o.yMax != null ? Math.max(o.yMax, ...vals) : Math.max(1, ...vals);
+    const ticks = niceTicks(max); max = ticks[ticks.length - 1];
+    const probe = document.createElementNS(NS, "text"); svg.append(probe); box.append(svg);
+    let ml = 0; ticks.forEach((t) => { probe.textContent = o.fmtAxis(t); ml = Math.max(ml, probe.getComputedTextLength ? probe.getComputedTextLength() : 40); });
+    probe.remove(); ml = Math.ceil(ml) + 8;
+    const y = (v) => mt + (H - mb - mt) * (1 - v / max);
+    const band = (W - ml) / Math.max(1, months.length);
+    const x = (i) => ml + band * i + band / 2;
+    const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+    ticks.forEach((t) => {
+      svg.append(mk("line", { x1: ml, x2: W, y1: y(t), y2: y(t), stroke: "var(--grid)" }));
+      const tx = mk("text", { x: ml - 6, y: y(t) + 4, "text-anchor": "end" }); tx.textContent = o.fmtAxis(t); svg.append(tx);
+    });
+    const every = band < 26 ? 2 : 1;
+    const j0 = months.findIndex((q) => q.endsWith("-01"));
+    months.forEach((m, i) => { if ((i - j0 + 24) % every === 0) { const tx = mk("text", { x: x(i), y: H - 6, "text-anchor": "middle" }); tx.textContent = axisLabel(m); svg.append(tx); } });
+    const nowI = months.indexOf(thisMonth);
+    if (nowI >= 0) svg.append(mk("rect", { x: x(nowI) + band / 2, y: mt, width: Math.max(0, W - x(nowI) - band / 2), height: H - mb - mt, fill: "var(--grid)", opacity: 0.35 }));
+    const order = series.map((s, i) => i).sort((a, b) => (series[a].bold ? 1 : 0) - (series[b].bold ? 1 : 0) || (series[b].faded ? 1 : 0) - (series[a].faded ? 1 : 0));
+    order.forEach((si) => {
+      const s = series[si]; let d = "";
+      s.values.forEach((v, i) => { if (v == null) return; d += (i > 0 && s.values[i - 1] != null ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); });
+      const g = mk("g", { opacity: s.faded ? 0.18 : 1 });
+      if (d) g.append(mk("path", { d, fill: "none", stroke: s.color, "stroke-width": s.bold ? 3 : 2, "stroke-dasharray": s.dash ? "5 4" : "none", "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      s.values.forEach((v, i) => { if (v != null && (s.values[i - 1] == null) && (s.values[i + 1] == null)) g.append(mk("circle", { cx: x(i), cy: y(v), r: 3, fill: s.color })); });
+      svg.append(g);
+    });
+    const cross = mk("line", { y1: mt, y2: H - mb, stroke: "var(--muted)", "stroke-width": 1, opacity: 0 }); svg.append(cross);
+    const dots = mk("g", {}); svg.append(dots);
+    months.forEach((m, i) => {
+      const hit = mk("rect", { x: ml + band * i, y: 0, width: band, height: H - mb, fill: "transparent" });
+      const show = (ev) => {
+        cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", 0.5);
+        dots.replaceChildren(...series.filter((s) => !s.faded && s.values[i] != null).map((s) => mk("circle", { cx: x(i), cy: y(s.values[i]), r: 4, fill: s.color, stroke: "var(--surface)", "stroke-width": 2 })));
+        let list = series.filter((s) => s.values[i] != null && (!s.faded || series.every((t) => t.faded || t.values[i] == null)));
+        if (o.sortTip) list = list.slice().sort((a, b) => b.values[i] - a.values[i]);
+        const lines = list.map((s) => [s.color, s.name, o.fmt(s.values[i])]);
+        showTip(box, ymLabel(m), lines.concat(o.extra ? o.extra(i) : []), ev);
+      };
+      hit.addEventListener("mousemove", show); hit.addEventListener("click", show);
+      hit.addEventListener("mouseleave", () => { hideTip(box); cross.setAttribute("opacity", 0); dots.replaceChildren(); });
+      svg.append(hit);
+    });
   }
 
   // simple stacked bar chart in SVG
@@ -351,9 +518,9 @@
         g.append(rect); acc += v;
       });
       svg.append(g);
-      if (i % every === 0) { const tx = document.createElementNS(NS, "text"); tx.setAttribute("x", ml + band * i + band / 2); tx.setAttribute("y", H - 6); tx.setAttribute("text-anchor", "middle"); tx.textContent = mLabel(r.month); svg.append(tx); }
+      if ((i - rows.findIndex((q) => q.month.endsWith("-01")) + 24) % every === 0) { const tx = document.createElementNS(NS, "text"); tx.setAttribute("x", ml + band * i + band / 2); tx.setAttribute("y", H - 6); tx.setAttribute("text-anchor", "middle"); tx.textContent = axisLabel(r.month); svg.append(tx); }
       const hit = document.createElementNS(NS, "rect"); hit.setAttribute("x", ml + band * i); hit.setAttribute("width", band); hit.setAttribute("y", 0); hit.setAttribute("height", H - mb); hit.setAttribute("fill", "transparent");
-      const show = (ev) => showTip(box, mLabel(r.month), o.tip(r), ev);
+      const show = (ev) => showTip(box, ymLabel(r.month), o.tip(r), ev);
       hit.addEventListener("mousemove", show); hit.addEventListener("click", show); hit.addEventListener("mouseleave", () => hideTip(box));
       svg.append(hit);
     });
