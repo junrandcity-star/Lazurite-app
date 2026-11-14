@@ -59,8 +59,8 @@ input[type=email], input[type=text], input[type=search], input[type=date] { bord
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { font-size: .8rem; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
 .prop-pick { display: flex; gap: 8px; align-items: center; }
-.prop-pick select { font: inherit; font-size: .85rem; padding: 4px 30px 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); min-width: 0; flex: 0 1 260px; max-width: 100%; }
-.prop-pick select.on { border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.prop-pick select, .month-pick { font: inherit; font-size: .85rem; padding: 4px 30px 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); min-width: 0; flex: 0 1 260px; max-width: 100%; }
+.prop-pick select.on, .month-pick.on { border-color: var(--accent); background-color: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 
 /* dashboard */
@@ -191,3 +191,6 @@ textarea { width: 100%; min-height: 72px; resize: vertical; font: inherit; font-
 }
 tfoot td { font-weight: 700; border-bottom: 0; border-top: 2px solid var(--line); }
 @media (min-width: 700px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.card-head .month-pick { flex: 0 0 auto; font-size: .75rem; padding: 3px 26px 3px 10px; }
+.card-head .seg { margin-left: auto; }
+.period-now { margin: 4px 0 0; font-size: .8rem; font-weight: 700; }

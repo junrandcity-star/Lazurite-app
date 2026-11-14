@@ -161,6 +161,7 @@
   $("prop-all").onclick = () => { S.prop = ALL; S.limit = 40; render(); };
   $("prop-sel").onchange = (e) => { S.prop = e.target.value || ALL; S.limit = 40; render(); };
   document.querySelectorAll("#period-seg button").forEach((b) => (b.onclick = () => { S.period = b.dataset.v; render(); }));
+  $("period-month").onchange = (e) => { S.period = e.target.value || "cur"; render(); };
   document.querySelectorAll("#metric-seg button").forEach((b) => (b.onclick = () => { S.metric = b.dataset.v; render(); }));
   function renderChips() {
     $("prop-all").setAttribute("aria-pressed", String(S.prop === ALL));
@@ -240,6 +241,7 @@
     const all = new Set(months); months.forEach((m) => all.add(minus12(m)));
     for (let m = year + "-01"; m <= cur; m = nextMonth(m)) all.add(m);
     all.add(prevMonth(cur));
+    for (let m = firstData; m <= until; m = nextMonth(m)) all.add(m);   // 施設別の比較で任意の月を選べるように
 
     const openDays = (p, m) => {
       const last = m + "-" + String(daysIn(m)).padStart(2, "0");
@@ -304,7 +306,7 @@
     }
 
     const selIds = S.prop === ALL ? S.props.map((p) => p.id) : S.props.filter((p) => p.name === S.prop).map((p) => p.id);
-    return { months, cur, year, lastData, calc, sel: calc(selIds), propById, minus12 };
+    return { months, cur, year, lastData, firstData, until, calc, sel: calc(selIds), propById, minus12 };
   }
 
   const METRIC = {
@@ -384,12 +386,19 @@
 
     // 施設別の比較
     const pt = $("prop-table");
-    const per = S.period === "ytd" ? "ytd" : "cur";
+    if (/^\d{4}-\d{2}$/.test(S.period) && (S.period < M.firstData || S.period > M.until)) S.period = "cur";
+    const per = S.period;
+    const pick = (x) => (per === "ytd" ? x.ytd : per === "cur" ? x.cur : x.byMonth[per]);
+    const pm = $("period-month");
+    const mopts = [el("option", "", "月を指定…")]; mopts[0].value = "";
+    for (let m = M.until; m >= M.firstData; m = prevMonth(m)) { const o = el("option", "", ymLabel(m)); o.value = m; mopts.push(o); }
+    pm.replaceChildren(...mopts); pm.value = per.includes("-") ? per : ""; pm.classList.toggle("on", per.includes("-"));
+    $("period-now").textContent = "対象: " + (per === "ytd" ? M.year + "年1月〜" + mLabel(cur) : ymLabel(per === "cur" ? cur : per)) + (per.includes("-") && per > thisMonth ? "(予約済み分)" : "");
     const head = el("thead"); const hr = el("tr");
     [["施設", ""], ["売上", "num"], ["稼働率", "num"], ["ADR", "num"], ["RevPAR", "num"], ["予約件数", "num hide-narrow"]].forEach(([t, c2]) => hr.append(el("th", c2, t)));
     head.append(hr);
     const body = el("tbody");
-    const prows = S.props.map((p) => ({ p, m: M.calc([p.id]) })).map((x) => Object.assign(x, { v: per === "ytd" ? x.m.ytd : x.m.cur })).sort((a, b) => b.v.sales - a.v.sales);
+    const prows = S.props.map((p) => ({ p, m: M.calc([p.id]) })).map((x) => Object.assign(x, { v: pick(x.m) })).sort((a, b) => b.v.sales - a.v.sales);
     const maxRev = Math.max(1, ...prows.map((x) => x.v.sales));
     prows.forEach(({ p, v }) => {
       const tr = el("tr"); if (p.name === S.prop) tr.className = "sel";
@@ -400,7 +409,7 @@
       tr.append(el("td", "num", pct(v.occ)), el("td", "num", yen(v.adr)), el("td", "num", yen(v.revpar)), el("td", "num hide-narrow", v.bookings + "件"));
       body.append(tr);
     });
-    const tot = per === "ytd" ? sel.ytd : sel.cur;
+    const tot = pick(sel);
     const foot = el("tfoot"); const fr = el("tr", "total");
     fr.append(el("td", "", S.prop === ALL ? "全施設" : "選択中"), el("td", "num", yen(tot.sales)), el("td", "num", pct(tot.occ)), el("td", "num", yen(tot.adr)), el("td", "num", yen(tot.revpar)), el("td", "num hide-narrow", tot.bookings + "件"));
     foot.append(fr);
