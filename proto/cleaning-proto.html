@@ -1,0 +1,1209 @@
+<title>清掃スケジュール試作</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Noto+Sans+Thai:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&display=swap">
+<style>
+/* Layout: prototype bar on top; owner view = single column up to 820px; cleaner view = phone-width column (max 440px) */
+:root {
+  --bg: #eef1f5; --surface: #ffffff; --fg: #18202c; --muted: #5b6676; --line: #d9dfe8;
+  --accent: #23408e; --accent-soft: #e5eaf7;
+  --wait: #b45309; --wait-soft: #fdf0dc;
+  --ok: #1d5fb8; --ok-soft: #e3eefc;
+  --work: #6b3fb5; --work-soft: #efe7fb;
+  --done: #23774f; --done-soft: #e1f3e9;
+  --bad: #b3261e; --bad-soft: #fbe6e4;
+  --none: #6b7280; --none-soft: #eef0f3;
+  --proto: #3b3f46;
+  --font: "Zen Kaku Gothic New", "Noto Sans Thai", "Noto Sans Devanagari", "Hiragino Sans", system-ui, sans-serif;
+  --r: 12px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f131a; --surface: #1a202b; --fg: #e7ebf2; --muted: #9ba5b5; --line: #2c3442;
+  --accent: #9db3f0; --accent-soft: #232e4a;
+  --wait: #f2b25c; --wait-soft: #3a2b14; --ok: #8ab8f5; --ok-soft: #1b2b44; --work: #c3a3f2; --work-soft: #2c2140;
+  --done: #7fd0a5; --done-soft: #183226; --bad: #f2a29b; --bad-soft: #3a2220; --none: #a3abb8; --none-soft: #242a35; --proto: #d7dbe2; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f131a; --surface: #1a202b; --fg: #e7ebf2; --muted: #9ba5b5; --line: #2c3442;
+  --accent: #9db3f0; --accent-soft: #232e4a;
+  --wait: #f2b25c; --wait-soft: #3a2b14; --ok: #8ab8f5; --ok-soft: #1b2b44; --work: #c3a3f2; --work-soft: #2c2140;
+  --done: #7fd0a5; --done-soft: #183226; --bad: #f2a29b; --bad-soft: #3a2220; --none: #a3abb8; --none-soft: #242a35; --proto: #d7dbe2; color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55; }
+button, input, select { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px 56px; }
+
+/* prototype control bar */
+.proto { max-width: 820px; margin: 0 auto 14px; border: 1px dashed var(--line); border-radius: var(--r); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: .82rem; color: var(--muted); }
+.proto b { color: var(--proto); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 14px; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); font-weight: 700; }
+.proto select { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; background: var(--surface); }
+.proto .reset { margin-left: auto; background: none; border: 0; color: var(--accent); text-decoration: underline; cursor: pointer; }
+
+/* shared bits */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: .75rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+.s-wait { color: var(--wait); background: var(--wait-soft); }
+.s-ok { color: var(--ok); background: var(--ok-soft); }
+.s-work { color: var(--work); background: var(--work-soft); }
+.s-done { color: var(--done); background: var(--done-soft); }
+.s-bad { color: var(--bad); background: var(--bad-soft); }
+.s-none { color: var(--none); background: var(--none-soft); }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--surface); border-radius: var(--r); padding: 10px 16px; font-weight: 700; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.small { padding: 6px 12px; font-size: .85rem; }
+.btn:disabled { opacity: .45; cursor: default; }
+.muted { color: var(--muted); }
+.tnum { font-variant-numeric: tabular-nums; }
+.sample { font-size: .7rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; }
+
+/* ---------- cleaner (phone) ---------- */
+.phone { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.ph-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ph-head h1 { font-size: 1.25rem; margin: 0; }
+.ph-head .who { font-size: .85rem; color: var(--muted); }
+.langs { display: flex; gap: 6px; flex-wrap: wrap; }
+.langs button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 11px; font-size: .85rem; cursor: pointer; }
+.langs button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.ctabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ctabs button { border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 10px 4px; cursor: pointer; font-weight: 700; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: .9rem; }
+.ctabs button svg { width: 22px; height: 22px; }
+.ctabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.ctabs .dot { position: relative; }
+.ctabs .badge { position: absolute; top: -6px; right: -12px; background: var(--wait); color: #fff; font-size: .7rem; border-radius: 999px; min-width: 18px; height: 18px; display: grid; place-items: center; padding: 0 4px; }
+.sec-title { font-size: .85rem; font-weight: 700; color: var(--muted); margin: 6px 2px -4px; display: flex; align-items: center; gap: 6px; }
+.sec-title.alert { color: var(--wait); }
+.job { padding: 14px; display: flex; flex-direction: column; gap: 10px; border-left-width: 6px; }
+.job.st-wait { border-left-color: var(--wait); }
+.job.st-ok { border-left-color: var(--ok); }
+.job.st-work { border-left-color: var(--work); }
+.job.st-done { border-left-color: var(--done); }
+.job.st-bad { border-left-color: var(--bad); }
+.job-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.job-date { font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+.job-date small { font-size: .9rem; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.job-prop { font-size: 1rem; font-weight: 700; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.fact { background: var(--bg); border-radius: 10px; padding: 8px; text-align: center; min-width: 0; }
+.fact svg { width: 18px; height: 18px; color: var(--muted); }
+.fact .v { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fact .l { font-size: .7rem; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; }
+.fact.tight .v { color: var(--bad); }
+.with { font-size: .85rem; color: var(--muted); }
+.actions { display: flex; gap: 8px; }
+.actions .btn { flex: 1; padding: 13px 10px; font-size: 1rem; }
+.big-ok { background: var(--done); border-color: var(--done); }
+.big-start { background: var(--work); border-color: var(--work); }
+.planned { display: flex; align-items: center; gap: 8px; background: var(--ok-soft); color: var(--ok); border-radius: 10px; padding: 8px 12px; font-weight: 700; }
+.planned .t { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.log { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.log .late { color: var(--bad); font-weight: 700; }
+.empty { text-align: center; color: var(--muted); padding: 24px; border: 1px dashed var(--line); border-radius: var(--r); }
+
+/* time picker sheet */
+.sheet-bg { position: fixed; inset: 0; background: rgba(10,14,20,.45); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet { background: var(--surface); width: 100%; max-width: 480px; border-radius: 18px 18px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; max-height: 85vh; overflow: auto; }
+.sheet h3 { margin: 0; font-size: 1.15rem; }
+.times { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.times button { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 12px 4px; font-size: 1.05rem; font-weight: 700; cursor: pointer; font-variant-numeric: tabular-nums; }
+.times button[aria-pressed="true"] { background: var(--done); border-color: var(--done); color: #fff; }
+.sheet .row { display: flex; gap: 8px; }
+.sheet .row .btn { flex: 1; padding: 13px; }
+.picklist { display: flex; flex-direction: column; gap: 6px; }
+.picklist label { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.picklist input { width: 20px; height: 20px; accent-color: var(--accent); }
+.picklist .main { font-size: .72rem; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; margin-left: auto; }
+
+/* guide */
+.g-props { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.g-props button { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .88rem; }
+.g-props button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.g-hint { font-size: .85rem; color: var(--muted); }
+.area { overflow: hidden; }
+.photo { aspect-ratio: 4 / 3; max-width: 100%; background: repeating-linear-gradient(135deg, var(--bg) 0 14px, var(--none-soft) 14px 28px); display: grid; place-items: center; color: var(--muted); font-size: .8rem; text-align: center; }
+.photo svg { width: 34px; height: 34px; display: block; margin: 0 auto 4px; }
+.area-body { padding: 12px 14px; }
+.area-body h4 { margin: 0 0 6px; font-size: 1.05rem; }
+.area-body ul { margin: 0; padding-left: 1.1em; }
+.area-body li { margin: 3px 0; }
+.area-body li.warn { color: var(--bad); font-weight: 700; }
+
+/* pay */
+.pay-total { padding: 18px; text-align: center; }
+.pay-total .v { font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pay-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.pay-row:first-child { border-top: 0; }
+.pay-row .half { font-size: .75rem; color: var(--muted); }
+
+/* ---------- owner ---------- */
+.owner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.owner h1 { font-size: 1.3rem; margin: 0; }
+.owner h2 { font-size: 1rem; margin: 0 0 8px; }
+.ostats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.ostat { padding: 12px 14px; }
+.ostat .l { font-size: .78rem; color: var(--muted); }
+.ostat .v { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ostat.alert .v { color: var(--wait); }
+.ostat.bad .v { color: var(--bad); }
+.otabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.otabs button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: .88rem; }
+.otabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 700; }
+.ojob { padding: 0; display: grid; grid-template-columns: 92px 1fr auto; align-items: stretch; overflow: hidden; }
+.ojob.urgent { box-shadow: 0 0 0 2px var(--wait); }
+.ojob.urgent.bad { box-shadow: 0 0 0 2px var(--bad); }
+.stblock { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 10px 4px; color: #fff; text-align: center; font-weight: 700; }
+.stblock .g { font-size: 1.9rem; line-height: 1; }
+.stblock .l { font-size: .78rem; line-height: 1.25; }
+.sb-none { background: #c2410c; } .sb-wait { background: #d97706; } .sb-bad { background: #b91c1c; }
+.sb-ok { background: #1d5fb8; } .sb-work { background: #6b3fb5; } .sb-done { background: #23774f; }
+.ojob .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ojob .d { font-weight: 700; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ojob .tag { font-size: .72rem; font-weight: 700; color: #fff; background: var(--bad); border-radius: 4px; padding: 1px 6px; }
+.ojob .tag.w { background: #d97706; }
+.ojob .meta { font-size: .82rem; color: var(--muted); overflow-wrap: anywhere; }
+.ojob .meta .tight { color: var(--bad); font-weight: 700; }
+.ojob .who { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.ojob .who .nm { font-size: .88rem; font-weight: 700; }
+.ojob .who .tm { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ojob .who .tm .late { color: var(--bad); font-weight: 700; }
+.ojob .act { padding: 12px 14px 12px 0; }
+@media (max-width: 520px) { .ojob { grid-template-columns: 74px 1fr; } .ojob .act { grid-column: 2; padding: 0 14px 12px; } .stblock .g { font-size: 1.6rem; } }
+.banner { padding: 14px 16px; border-radius: var(--r); display: flex; flex-direction: column; gap: 8px; }
+.banner.warn { background: var(--wait-soft); border: 2px solid var(--wait); }
+.banner.badb { background: var(--bad-soft); border: 2px solid var(--bad); }
+.banner.good { background: var(--done-soft); border: 2px solid var(--done); }
+.banner .h { font-weight: 700; font-size: 1.02rem; }
+.banner .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.banner .chip { font-size: .82rem; background: var(--surface); border-radius: 999px; padding: 3px 10px; font-weight: 700; }
+.sec-h { font-size: .95rem; font-weight: 700; margin: 6px 2px -2px; display: flex; gap: 8px; align-items: baseline; }
+.sec-h small { font-weight: 400; color: var(--muted); font-size: .8rem; }
+.picklist .sub { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+.mgr { display: flex; flex-direction: column; gap: 10px; }
+.mgr-row { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.mgr-row .top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.mgr-row .nm { font-weight: 700; font-size: 1.02rem; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.checks label { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: .85rem; cursor: pointer; background: var(--bg); }
+.checks label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.checks input { accent-color: var(--accent); }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
+.field input, .field select, .mgr-row select, .mgr-row input[type=text] { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 7px 9px; font-size: .9rem; color: var(--fg); min-width: 0; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px; }
+.g-edit { overflow: hidden; }
+.g-edit .photo { cursor: pointer; position: relative; }
+.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.g-edit .notes { display: flex; flex-direction: column; gap: 6px; }
+.g-edit .nrow { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
+.g-edit .nrow input[type=text] { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 7px 9px; min-width: 0; }
+.g-edit .nrow label { font-size: .75rem; color: var(--bad); display: inline-flex; gap: 3px; align-items: center; white-space: nowrap; }
+.linkbtn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 2px 4px; font-size: .85rem; text-decoration: underline; text-underline-offset: 2px; }
+.linkbtn.del { color: var(--muted); }
+.olist { display: flex; flex-direction: column; gap: 8px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+td select, td input { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 4px 6px; }
+td input { width: 90px; text-align: right; }
+td input[type=checkbox] { width: auto; padding: 0; }
+td .checks { flex-wrap: wrap; max-width: 340px; }
+.note { font-size: .8rem; color: var(--muted); }
+.panel { padding: 14px; }
+/* view toggle + calendar */
+.vtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); align-self: flex-start; }
+.vtoggle button { border: 0; background: none; padding: 6px 14px; cursor: pointer; color: var(--muted); font-size: .88rem; display: inline-flex; gap: 6px; align-items: center; }
+.vtoggle button svg { width: 16px; height: 16px; }
+.vtoggle button[aria-pressed="true"] { background: var(--accent); color: var(--surface); font-weight: 700; }
+.cal { padding: 12px; }
+.cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cal-head b { font-size: 1.05rem; }
+.cal-head button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; width: 34px; height: 34px; cursor: pointer; font-size: 1rem; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal-wd { font-size: .72rem; color: var(--muted); text-align: center; padding: 2px 0; }
+.cal-wd.sun { color: var(--bad); }
+.cal-day { min-height: 74px; border: 1px solid var(--line); border-radius: 8px; padding: 3px; background: var(--bg); cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--fg); }
+.cal-day.out { opacity: .35; }
+.cal-day.today .n { background: var(--accent); color: var(--surface); border-radius: 999px; padding: 0 6px; }
+.cal-day[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--accent-soft); }
+.cal-day .n { font-size: .75rem; font-weight: 700; align-self: flex-start; font-variant-numeric: tabular-nums; }
+.cal-chip { font-size: .66rem; font-weight: 700; color: #fff; border-radius: 4px; padding: 1px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
+.cal-dots { display: flex; flex-wrap: wrap; gap: 3px; }
+.cal-dots i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: .72rem; color: var(--muted); margin-top: 8px; }
+.cal-legend span { display: inline-flex; gap: 4px; align-items: center; }
+.cal-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+/* expenses */
+.exp { padding: 12px 14px; display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: start; }
+.exp .thumb { width: 64px; height: 84px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); cursor: zoom-in; padding: 0; }
+.exp .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.exp .t1 { font-weight: 700; }
+.exp .t2 { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.exp .amt { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.exp .reason { grid-column: 2 / -1; font-size: .82rem; color: var(--bad); background: var(--bad-soft); border-radius: 8px; padding: 6px 10px; }
+.exp .owner-fields { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; border-top: 1px dashed var(--line); padding-top: 10px; }
+.exp .owner-fields .field { flex: 1 1 160px; }
+.pv { width: 100%; max-height: 260px; object-fit: contain; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); }
+.shot { display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px dashed var(--accent); color: var(--accent); border-radius: 12px; padding: 18px; font-weight: 700; cursor: pointer; }
+.shot svg { width: 26px; height: 26px; }
+.sheet .field input, .sheet .field select { font-size: 1rem; padding: 10px; }
+.breakdown .pay-row b { font-size: 1.05rem; }
+.confirm-box { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.confirmed { color: var(--done); font-weight: 700; font-size: .9rem; }
+/* statement */
+.stmt { padding: 22px 20px; display: flex; flex-direction: column; gap: 14px; }
+.stmt h2 { text-align: center; font-size: 1.3rem; letter-spacing: .3em; margin: 0; }
+.stmt .hd { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px 24px; font-size: .85rem; }
+.stmt .hd dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.stmt .hd dt { color: var(--muted); }
+.stmt .hd dd { margin: 0; }
+.stmt .sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.stmt .sum > div { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.stmt .sum > div:last-child { background: var(--accent-soft); border-color: var(--accent); }
+.stmt .sum .l { font-size: .75rem; color: var(--muted); }
+.stmt .sum .v { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stmt h3 { font-size: .95rem; margin: 6px 0 0; }
+.stmt table { font-size: .8rem; }
+.stmt .rec { font-size: .82rem; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.stmt .rec dt { color: var(--muted); }
+.stmt .rec dd { margin: 0; }
+.stmt .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+</style>
+
+<div class="wrap">
+  <div class="proto" id="proto">
+    <b>試作品</b>
+    <span class="seg" role="group" aria-label="画面の切り替え">
+      <button type="button" id="v-owner" aria-pressed="true">オーナー画面</button>
+      <button type="button" id="v-cleaner" aria-pressed="false">清掃員の画面</button>
+    </span>
+    <label id="who-wrap" hidden>清掃員:<select id="who"></select></label>
+    <span>名前・人数・金額はサンプルです。操作した内容は再読み込みで元に戻ります。</span>
+    <button type="button" class="reset" id="reset">最初の状態に戻す</button>
+  </div>
+  <main id="app"></main>
+</div>
+
+<script>
+(function () {
+  // ---------- sample data ----------
+  const TODAY = '2026-10-19';
+  const WEEK_END = '2026-10-26'; // today + 7 days
+  const PROPS = [
+    { name: 'Laughter',      out: '10:00', in: '16:00', rate: 9000, main: 'bikash', members: ['bikash', 'sato'] },
+    { name: 'Pear Field',    out: '11:00', in: '15:00', rate: 6000, main: 'linh',   members: ['linh'] },
+    { name: 'Rosy Days',     out: '11:00', in: '15:00', rate: 6000, main: 'linh',   members: ['linh', 'anan'] },
+    { name: 'Scent of Asia', out: '10:00', in: '16:00', rate: 8000, main: 'bikash', members: ['bikash', 'maria'] },
+    { name: 'Stay Silky',    out: '11:00', in: '15:00', rate: 6000, main: 'anan',   members: ['anan', 'sato'] },
+    { name: 'Yokohama',      out: '10:00', in: '16:00', rate: 5000, main: 'maria',  members: ['maria', 'sato'] },
+  ];
+  const CLEANERS = [
+    { id: 'anan',   name: 'Anan',   lang: 'th', contact: 'LINE' },
+    { id: 'bikash', name: 'Bikash', lang: 'ne', contact: 'LINE' },
+    { id: 'linh',   name: 'Linh',   lang: 'vi', contact: 'LINE' },
+    { id: 'maria',  name: 'Maria',  lang: 'en', contact: 'メール' },
+    { id: 'sato',   name: '佐藤',   lang: 'ja', contact: 'LINE' },
+  ];
+  const LANG_JA = { ja: '日本語', en: '英語', th: 'タイ語', ne: 'ネパール語', vi: 'ベトナム語' };
+  // jobs = real check-out dates from the reservation data; guests are sample values
+  const BASE_JOBS = [
+    ["RO1003","Rosy Days","2026-10-03","2026-10-03"],["SC1003","Scent of Asia","2026-10-03","2026-10-09"],["LA1004","Laughter","2026-10-04","2026-10-11"],["YO1004","Yokohama","2026-10-04","2026-10-10"],["ST1005","Stay Silky","2026-10-05","2026-10-05"],["RO1008","Rosy Days","2026-10-08","2026-10-10"],["SC1011","Scent of Asia","2026-10-11","2026-10-11"],["ST1011","Stay Silky","2026-10-11","2026-10-11"],["YO1011","Yokohama","2026-10-11","2026-10-11"],["SC1012","Scent of Asia","2026-10-12","2026-10-17"],["YO1012","Yokohama","2026-10-12","2026-10-17"],["ST1016","Stay Silky","2026-10-16","2026-10-17"],["LA1017","Laughter","2026-10-17","2026-10-17"],["LA1018","Laughter","2026-10-18","2026-10-24"],["SC1018","Scent of Asia","2026-10-18","2026-10-21"],["YO1018","Yokohama","2026-10-18","2026-10-24"],
+    ["RO1021","Rosy Days","2026-10-21","2026-10-23"],["ST1023","Stay Silky","2026-10-23","2026-10-24"],["SC1025","Scent of Asia","2026-10-25","2026-10-27"],["YO1025","Yokohama","2026-10-25",null],["LA1026","Laughter","2026-10-26","2026-10-28"],["RO1026","Rosy Days","2026-10-26","2026-10-26"],["ST1027","Stay Silky","2026-10-27","2026-10-27"],["LA1101","Laughter","2026-11-01",null],["PE1101","Pear Field","2026-11-01",null],["RO1101","Rosy Days","2026-11-01",null],["SC1101","Scent of Asia","2026-11-01",null],["ST1101","Stay Silky","2026-11-01",null]
+  ];
+  const GUESTS = [2,4,3,2,2,3,4,2,1,3,2,2,5,3,4,2,3,2,4,1,5,3,2,4,2,3,4,2];
+  function initialState() {
+    const jobs = BASE_JOBS.map(([id, prop, date, nextIn], i) => ({ id, prop, date, nextIn, guests: GUESTS[i], asg: [] }));
+    const J = Object.fromEntries(jobs.map(j => [j.id, j]));
+    const done = (id, who, plan, start, end) => J[id].asg.push({ c: who, st: 'done', plan, start, end });
+    done('RO1003','linh','11:00','11:05','14:10'); done('SC1003','bikash','10:00','10:00','13:30'); done('LA1004','bikash','10:30','10:35','14:00');
+    done('YO1004','maria','10:00','10:10','12:30'); done('ST1005','anan','11:00','11:20','14:05'); done('RO1008','linh','11:30','11:30','14:00');
+    done('SC1011','bikash','10:00','10:02','13:20'); done('SC1011','maria','10:00','10:05','13:20');
+    done('ST1011','anan','11:00','11:00','13:40'); done('YO1011','maria','10:00','10:00','12:20'); done('SC1012','bikash','10:30','10:30','13:30');
+    done('YO1012','sato','10:00','10:05','12:40'); done('ST1016','anan','11:00','11:35','14:30'); done('LA1017','bikash','10:00','10:00','14:10'); done('LA1017','sato','10:00','10:10','14:10');
+    done('LA1018','bikash','10:30','10:30','14:00'); done('SC1018','maria','10:00','10:20','13:40'); done('YO1018','sato','10:00','10:00','12:30');
+    J.RO1021.asg.push({ c: 'linh', st: 'ok', plan: '11:30' });
+    J.ST1023.asg.push({ c: 'anan', st: 'wait' });
+    J.SC1025.asg.push({ c: 'bikash', st: 'ok', plan: '10:30' }, { c: 'maria', st: 'wait' });
+    J.YO1025.asg.push({ c: 'maria', st: 'cant' });
+    J.RO1026.asg.push({ c: 'anan', st: 'wait' });
+    J.ST1027.asg.push({ c: 'anan', st: 'ok', plan: '11:00' });
+    const guide = {};
+    PROPS.forEach(p => { guide[p.name] = JSON.parse(JSON.stringify(AREAS)).map(a => ({ ...a, photo: null })); });
+    const expenses = [
+      { id: 'e1', c: 'anan', date: '2026-10-11', amount: 1280, store: 'ダイソー', item: 'スポンジ・ゴミ袋', prop: 'Stay Silky', status: 'approved', invoiceNo: 'T1234567890123', taxRate: '10', approvedAt: '10/12 09:15' },
+      { id: 'e2', c: 'anan', date: '2026-10-18', amount: 2450, store: 'マツモトキヨシ', item: 'トイレ用洗剤・ハンドソープ', prop: 'Stay Silky', status: 'pending', invoiceNo: '', taxRate: '10' },
+      { id: 'e3', c: 'bikash', date: '2026-10-17', amount: 980, store: 'セブン-イレブン', item: 'ティッシュ', prop: 'Laughter', status: 'pending', invoiceNo: '', taxRate: '10' },
+      { id: 'e4', c: 'maria', date: '2026-10-04', amount: 3300, store: 'ニトリ', item: 'バスマット', prop: 'Yokohama', status: 'returned', reason: 'レシートの金額が読めません。撮り直してください。', invoiceNo: '', taxRate: '10' },
+    ];
+    expenses.forEach(e => { e.photo = receiptSVG(e.store, e.item, e.amount, e.date); });
+    const log = [
+      { cid: 'anan', at: '10/11 18:02', who: 'Anan', text: '立替を登録(¥1,280 ダイソー)' },
+      { cid: 'anan', at: '10/12 09:15', who: 'オーナー', text: '立替を承認(¥1,280 ダイソー)' },
+      { cid: 'anan', at: '10/18 17:40', who: 'Anan', text: '立替を登録(¥2,450 マツモトキヨシ)' },
+      { cid: 'bikash', at: '10/17 16:20', who: 'Bikash', text: '立替を登録(¥980 セブン-イレブン)' },
+      { cid: 'maria', at: '10/04 15:10', who: 'Maria', text: '立替を登録(¥3,300 ニトリ)' },
+      { cid: 'maria', at: '10/05 08:30', who: 'オーナー', text: '立替を差し戻し(理由:レシートの金額が読めません。撮り直してください。)' },
+    ];
+    return { jobs, props: PROPS.map(p => ({ ...p, members: p.members.slice() })), cleaners: CLEANERS.map(c => ({ ...c })), guide, expenses, confirms: {}, log };
+  }
+  const UI = { view: 'owner', who: 'anan', lang: 'th', ctab: 'jobs', gprop: null, otab: 'jobs', ogprop: 'Stay Silky', sheet: null, modeO: 'list', modeC: 'list', calO: '2026-10', calC: '2026-10', selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
+
+  // ---------- i18n (cleaner screen) ----------
+  const LANGS = [['ja','日本語'],['en','English'],['th','ไทย'],['ne','नेपाली'],['vi','Tiếng Việt']];
+  const LOC = { ja: 'ja-JP', en: 'en-US', th: 'th-TH', ne: 'ne-NP', vi: 'vi-VN' };
+  const T = {
+    ja: { title:'わたしの清掃', jobs:'予定', guide:'ガイド', pay:'お給料', need:'返事をしてください', upcoming:'これからの予定', donesec:'終わった清掃', out:'チェックアウト', nextIn:'次のチェックイン', same:'当日', unknown:'未定', guests:'人', guestsL:'次のお客様', okBtn:'OK・時間を選ぶ', cant:'行けない', pick:'何時に入りますか?', confirm:'決定', cancel:'やめる', planned:'入る時間', start:'清掃を始める', finish:'清掃が終わった', wait:'返事待ち', ok:'OK済み', work:'清掃中', done:'完了', cantSt:'行けないと連絡済み', with:'一緒に', hint:'清掃のあとは、この写真と同じ状態にしてください。', month:'今月のお給料', times:'回', half:'2人で担当(半分)', empty:'予定はありません', started:'開始', ended:'完了', late:'分遅れ', photo:'写真(オーナーが登録)', confirmCant:'本当に行けませんか?オーナーに連絡が届きます。', yes:'はい、行けません', canSt:'できる時間', protoNote:'試作品では日付に関係なく押せます' },
+    en: { title:'My cleaning jobs', jobs:'Schedule', guide:'Guide', pay:'Pay', need:'Please reply', upcoming:'Upcoming', donesec:'Finished', out:'Check-out', nextIn:'Next check-in', same:'Same day', unknown:'TBD', guests:'', guestsL:'Next guests', okBtn:'OK · Choose time', cant:"Can't go", pick:'What time will you start?', confirm:'Confirm', cancel:'Cancel', planned:'Start time', start:'Start cleaning', finish:'Finished cleaning', wait:'Waiting for reply', ok:'Accepted', work:'Cleaning now', done:'Done', cantSt:'Told owner: can\'t go', with:'With', hint:'After cleaning, make it look exactly like this photo.', month:'Pay this month', times:'jobs', half:'2 people (half)', empty:'No jobs', started:'Start', ended:'Done', late:' min late', photo:'Photo (added by owner)', confirmCant:"Really can't go? The owner will be notified.", yes:"Yes, I can't go", canSt:'Time window', protoNote:'' },
+    th: { title:'งานทำความสะอาดของฉัน', jobs:'ตารางงาน', guide:'คู่มือ', pay:'ค่าจ้าง', need:'กรุณาตอบกลับ', upcoming:'งานที่จะมาถึง', donesec:'งานที่เสร็จแล้ว', out:'เช็คเอาท์', nextIn:'เช็คอินถัดไป', same:'วันเดียวกัน', unknown:'ยังไม่แน่นอน', guests:'คน', guestsL:'แขกคนถัดไป', okBtn:'ตกลง・เลือกเวลา', cant:'ไปไม่ได้', pick:'จะเข้าทำความสะอาดกี่โมง?', confirm:'ยืนยัน', cancel:'ยกเลิก', planned:'เวลาที่จะเข้า', start:'เริ่มทำความสะอาด', finish:'ทำความสะอาดเสร็จแล้ว', wait:'รอตอบกลับ', ok:'ตกลงแล้ว', work:'กำลังทำความสะอาด', done:'เสร็จแล้ว', cantSt:'แจ้งว่าไปไม่ได้แล้ว', with:'ทำร่วมกับ', hint:'หลังทำความสะอาด กรุณาจัดให้เหมือนในรูปนี้', month:'ค่าจ้างเดือนนี้', times:'ครั้ง', half:'ทำ 2 คน (ครึ่งหนึ่ง)', empty:'ไม่มีงาน', started:'เริ่ม', ended:'เสร็จ', late:' นาที สาย', photo:'รูปภาพ (เจ้าของเพิ่ม)', confirmCant:'ไปไม่ได้จริงๆ ใช่ไหม? ระบบจะแจ้งเจ้าของ', yes:'ใช่ ไปไม่ได้', canSt:'ช่วงเวลา', protoNote:'' },
+    ne: { title:'मेरो सरसफाइ काम', jobs:'तालिका', guide:'निर्देशिका', pay:'तलब', need:'कृपया जवाफ दिनुहोस्', upcoming:'आउँदै गरेका काम', donesec:'सकिएका काम', out:'चेक-आउट', nextIn:'अर्को चेक-इन', same:'सोही दिन', unknown:'तय भएको छैन', guests:'जना', guestsL:'अर्को पाहुना', okBtn:'ठीक छ・समय छान्नुहोस्', cant:'आउन सक्दिन', pick:'कति बजे सुरु गर्नुहुन्छ?', confirm:'पक्का गर्नुहोस्', cancel:'रद्द', planned:'सुरु गर्ने समय', start:'सरसफाइ सुरु गर्नुहोस्', finish:'सरसफाइ सकियो', wait:'जवाफ पर्खँदै', ok:'स्वीकार गरियो', work:'सरसफाइ हुँदैछ', done:'सकियो', cantSt:'आउन नसक्ने जानकारी दिइयो', with:'सँगै', hint:'सरसफाइपछि यो फोटो जस्तै बनाउनुहोस्।', month:'यो महिनाको तलब', times:'पटक', half:'२ जनाले (आधा)', empty:'कुनै काम छैन', started:'सुरु', ended:'सकियो', late:' मिनेट ढिलो', photo:'फोटो (मालिकले राख्ने)', confirmCant:'साँच्चै आउन सक्नुहुन्न? मालिकलाई जानकारी जान्छ।', yes:'हो, आउन सक्दिन', canSt:'समय', protoNote:'' },
+    vi: { title:'Công việc dọn dẹp của tôi', jobs:'Lịch', guide:'Hướng dẫn', pay:'Tiền lương', need:'Vui lòng trả lời', upcoming:'Sắp tới', donesec:'Đã xong', out:'Trả phòng', nextIn:'Nhận phòng tiếp theo', same:'Cùng ngày', unknown:'Chưa rõ', guests:'người', guestsL:'Khách tiếp theo', okBtn:'OK・Chọn giờ', cant:'Không đi được', pick:'Bạn sẽ bắt đầu lúc mấy giờ?', confirm:'Xác nhận', cancel:'Hủy', planned:'Giờ bắt đầu', start:'Bắt đầu dọn', finish:'Đã dọn xong', wait:'Chờ trả lời', ok:'Đã nhận', work:'Đang dọn', done:'Hoàn thành', cantSt:'Đã báo không đi được', with:'Làm cùng', hint:'Sau khi dọn, hãy sắp xếp giống như ảnh này.', month:'Lương tháng này', times:'lần', half:'2 người (chia đôi)', empty:'Không có lịch', started:'Bắt đầu', ended:'Xong', late:' phút trễ', photo:'Ảnh (chủ nhà thêm)', confirmCant:'Bạn thật sự không đi được? Chủ nhà sẽ được báo.', yes:'Vâng, không đi được', canSt:'Khung giờ', protoNote:'' },
+  };
+  const T2 = {
+    ja: { listV:'リスト', calV:'カレンダー', fee:'清掃料', reimb:'立替精算', totalPay:'今月のお支払い', expTitle:'立て替えた買い物', addExp:'立替を登録する', receipt:'レシートの写真', takePhoto:'レシートを撮影する', retake:'撮り直す', pdate:'買った日', amount:'払った金額(円)', store:'お店', item:'買った物', forProp:'どの施設用', submit:'送る', st_pending:'確認中', st_approved:'承認済み', st_returned:'差し戻し', reason:'理由', needPhoto:'レシートの写真と金額を入れてください', confirmBtn:'明細の内容を確認しました', confirmedAt:'確認済み', noExp:'まだありません', resend:'直して送る', feeList:'清掃料の内訳' },
+    en: { listV:'List', calV:'Calendar', fee:'Cleaning fee', reimb:'Reimbursement', totalPay:'Payment this month', expTitle:'Things I bought', addExp:'Add a purchase', receipt:'Receipt photo', takePhoto:'Take a receipt photo', retake:'Retake', pdate:'Purchase date', amount:'Amount paid (yen)', store:'Store', item:'Items', forProp:'For which property', submit:'Send', st_pending:'Checking', st_approved:'Approved', st_returned:'Returned', reason:'Reason', needPhoto:'Please add the receipt photo and the amount.', confirmBtn:'I checked this statement', confirmedAt:'Checked', noExp:'None yet', resend:'Fix and send', feeList:'Cleaning fee details' },
+    th: { listV:'รายการ', calV:'ปฏิทิน', fee:'ค่าทำความสะอาด', reimb:'เงินคืนค่าซื้อของ', totalPay:'ยอดจ่ายเดือนนี้', expTitle:'ของที่ซื้อแทน', addExp:'บันทึกการซื้อของ', receipt:'รูปใบเสร็จ', takePhoto:'ถ่ายรูปใบเสร็จ', retake:'ถ่ายใหม่', pdate:'วันที่ซื้อ', amount:'จำนวนเงินที่จ่าย (เยน)', store:'ร้าน', item:'ของที่ซื้อ', forProp:'ใช้ที่บ้านไหน', submit:'ส่ง', st_pending:'กำลังตรวจสอบ', st_approved:'อนุมัติแล้ว', st_returned:'ส่งกลับ', reason:'เหตุผล', needPhoto:'กรุณาใส่รูปใบเสร็จและจำนวนเงิน', confirmBtn:'ตรวจสอบรายละเอียดแล้ว', confirmedAt:'ตรวจสอบแล้ว', noExp:'ยังไม่มี', resend:'แก้ไขแล้วส่ง', feeList:'รายละเอียดค่าทำความสะอาด' },
+    ne: { listV:'सूची', calV:'क्यालेन्डर', fee:'सरसफाइ शुल्क', reimb:'खर्च फिर्ता', totalPay:'यो महिनाको भुक्तानी', expTitle:'मैले किनेका सामान', addExp:'खरिद दर्ता गर्नुहोस्', receipt:'रसिदको फोटो', takePhoto:'रसिदको फोटो खिच्नुहोस्', retake:'फेरि खिच्नुहोस्', pdate:'किनेको मिति', amount:'तिरेको रकम (येन)', store:'पसल', item:'किनेका सामान', forProp:'कुन घरको लागि', submit:'पठाउनुहोस्', st_pending:'जाँच हुँदै', st_approved:'स्वीकृत', st_returned:'फिर्ता पठाइयो', reason:'कारण', needPhoto:'कृपया रसिदको फोटो र रकम राख्नुहोस्।', confirmBtn:'विवरण जाँचें', confirmedAt:'जाँचिएको', noExp:'अहिलेसम्म छैन', resend:'सच्याएर पठाउनुहोस्', feeList:'सरसफाइ शुल्कको विवरण' },
+    vi: { listV:'Danh sách', calV:'Lịch tháng', fee:'Tiền dọn dẹp', reimb:'Hoàn tiền mua đồ', totalPay:'Thanh toán tháng này', expTitle:'Đồ tôi đã mua', addExp:'Đăng ký mua đồ', receipt:'Ảnh hóa đơn', takePhoto:'Chụp hóa đơn', retake:'Chụp lại', pdate:'Ngày mua', amount:'Số tiền đã trả (yên)', store:'Cửa hàng', item:'Món đã mua', forProp:'Dùng cho nhà nào', submit:'Gửi', st_pending:'Đang kiểm tra', st_approved:'Đã duyệt', st_returned:'Bị trả lại', reason:'Lý do', needPhoto:'Vui lòng thêm ảnh hóa đơn và số tiền.', confirmBtn:'Tôi đã kiểm tra bảng kê', confirmedAt:'Đã kiểm tra', noExp:'Chưa có', resend:'Sửa và gửi lại', feeList:'Chi tiết tiền dọn dẹp' },
+  };
+  Object.keys(T2).forEach(k => Object.assign(T[k], T2[k]));
+  const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
+
+  // guide: same 5 areas for each property (sample notes)
+  const AREAS = [
+    { key: 'bed', name: { ja:'ベッド', en:'Bed', th:'เตียง', ne:'ओछ्यान', vi:'Giường' }, notes: [
+      { ja:'枕は1台に2つ。タグが見えない向きに置く', en:'2 pillows per bed. Hide the tags.', th:'หมอน 2 ใบต่อเตียง ซ่อนป้ายไม่ให้เห็น', ne:'एउटा ओछ्यानमा २ वटा सिरानी। ट्याग नदेखिने गरी राख्नुहोस्।', vi:'Mỗi giường 2 gối. Giấu nhãn đi.' },
+      { ja:'シーツのしわを伸ばし、角は三角に折る', en:'Smooth the sheets. Fold corners neatly.', th:'ปูผ้าปูให้เรียบ พับมุมให้เรียบร้อย', ne:'तन्ना सम्म पार्नुहोस्। कुना राम्ररी पट्याउनुहोस्।', vi:'Kéo phẳng ga. Gấp góc gọn gàng.' } ] },
+    { key: 'bath', name: { ja:'浴室', en:'Bathroom', th:'ห้องน้ำ', ne:'बाथरुम', vi:'Phòng tắm' }, notes: [
+      { warn: true, ja:'排水口の髪の毛を最後にもう一度確認', en:'Check the drain for hair one last time.', th:'ตรวจเส้นผมที่ท่อระบายน้ำอีกครั้งตอนสุดท้าย', ne:'अन्तिममा नालीमा कपाल छ कि फेरि जाँच्नुहोस्।', vi:'Kiểm tra lại tóc ở lỗ thoát nước lần cuối.' },
+      { ja:'鏡と蛇口の水滴を拭く', en:'Wipe water spots on the mirror and tap.', th:'เช็ดคราบน้ำที่กระจกและก๊อกน้ำ', ne:'ऐना र धारामा पानीका दाग पुछ्नुहोस्।', vi:'Lau vết nước trên gương và vòi.' } ] },
+    { key: 'kitchen', name: { ja:'キッチン', en:'Kitchen', th:'ห้องครัว', ne:'भान्सा', vi:'Bếp' }, notes: [
+      { ja:'食器は乾かしてから棚へ', en:'Dry the dishes before putting them away.', th:'เช็ดจานให้แห้งก่อนเก็บเข้าตู้', ne:'भाँडा सुकाएर मात्र दराजमा राख्नुहोस्।', vi:'Lau khô bát đĩa rồi mới cất.' },
+      { ja:'冷蔵庫の中に忘れ物がないか確認', en:'Check the fridge for left items.', th:'ตรวจดูของที่ลืมไว้ในตู้เย็น', ne:'फ्रिजमा छुटेका सामान छन् कि हेर्नुहोस्।', vi:'Kiểm tra đồ khách để quên trong tủ lạnh.' } ] },
+    { key: 'living', name: { ja:'リビング', en:'Living room', th:'ห้องนั่งเล่น', ne:'बैठक कोठा', vi:'Phòng khách' }, notes: [
+      { ja:'リモコンはテーブルの中央に並べる', en:'Line up the remotes in the middle of the table.', th:'วางรีโมทเรียงไว้กลางโต๊ะ', ne:'रिमोटहरू टेबलको बीचमा मिलाएर राख्नुहोस्।', vi:'Xếp điều khiển ở giữa bàn.' } ] },
+    { key: 'amenity', name: { ja:'タオル・備品', en:'Towels & supplies', th:'ผ้าเช็ดตัวและของใช้', ne:'तौलिया र सामान', vi:'Khăn & đồ dùng' }, notes: [
+      { warn: true, ja:'タオルは「次のお客様の人数+1」セット', en:'Towels: number of next guests + 1 set.', th:'ผ้าเช็ดตัว: จำนวนแขกคนถัดไป + 1 ชุด', ne:'तौलिया: अर्को पाहुनाको संख्या + १ सेट।', vi:'Khăn: số khách tiếp theo + 1 bộ.' },
+      { ja:'トイレットペーパーは予備を2つ', en:'Leave 2 spare toilet rolls.', th:'วางกระดาษชำระสำรอง 2 ม้วน', ne:'२ वटा थप ट्वाइलेट पेपर राख्नुहोस्।', vi:'Để 2 cuộn giấy vệ sinh dự phòng.' } ] },
+  ];
+
+  let S = initialState();
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const prop = (n) => S.props.find(p => p.name === n);
+  const cl = (id) => S.cleaners.find(c => c.id === id);
+  const yen = (v) => '¥' + new Intl.NumberFormat('ja-JP').format(Math.round(v));
+  const mins = (hm) => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
+  const hm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const nowHM = () => { const d = new Date(); return hm(d.getHours() * 60 + d.getMinutes()); };
+  const dateFmt = (s, lang) => {
+    const d = new Date(s + 'T00:00:00');
+    try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { month: 'numeric', day: 'numeric' }).format(d); } catch (e) { return s.slice(5); }
+  };
+  const wdFmt = (s, lang) => { const d = new Date(s + 'T00:00:00'); try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { weekday: 'short' }).format(d); } catch (e) { return ''; } };
+  const jaDate = (s) => Number(s.slice(5, 7)) + '/' + Number(s.slice(8, 10)) + '(' + '日月火水木金土'[new Date(s + 'T00:00:00').getDay()] + ')';
+  const lateMin = (a) => (a.plan && a.start ? mins(a.start) - mins(a.plan) : 0);
+  const jobStatus = (j) => {
+    if (!j.asg.length) return 'none';
+    if (j.asg.some(a => a.st === 'cant')) return 'bad';
+    if (j.asg.some(a => a.st === 'wait')) return 'wait';
+    if (j.asg.every(a => a.st === 'done')) return 'done';
+    if (j.asg.some(a => a.st === 'work')) return 'work';
+    return 'ok';
+  };
+  const ICON = {
+    out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg>',
+    in: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h12"/></svg>',
+    people: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14.5c2.3.3 4 1.9 4.5 4.5"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M8 7h7"/></svg>',
+    yen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l6 8 6-8"/><path d="M12 11v10M7 13h10M7 17h10"/></svg>',
+    cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
+  };
+  const icon = (k) => { const s = el('span'); s.innerHTML = ICON[k]; return s.firstChild; }; // static markup only
+
+  // ---------- top controls ----------
+  const whoSel = $('who');
+  function fillWho() { whoSel.replaceChildren(...S.cleaners.map(c => { const o = el('option', null, c.name + '(' + LANG_JA[c.lang] + ')'); o.value = c.id; return o; })); whoSel.value = UI.who; }
+  whoSel.onchange = () => { UI.who = whoSel.value; UI.lang = cl(UI.who).lang; render(); };
+  $('v-owner').onclick = () => { UI.view = 'owner'; render(); };
+  $('v-cleaner').onclick = () => { UI.view = 'cleaner'; UI.lang = cl(UI.who).lang; render(); };
+  $('reset').onclick = () => { S = initialState(); UI.sheet = null; render(); };
+
+  function render() {
+    $('v-owner').setAttribute('aria-pressed', String(UI.view === 'owner'));
+    $('v-cleaner').setAttribute('aria-pressed', String(UI.view === 'cleaner'));
+    $('who-wrap').hidden = UI.view !== 'cleaner'; fillWho();
+    document.documentElement.lang = UI.view === 'cleaner' ? UI.lang : 'ja';
+    const app = $('app');
+    app.replaceChildren(UI.view === 'owner' ? ownerView() : cleanerView());
+    const old = document.querySelector('.sheet-bg'); if (old) old.remove();
+    if (UI.sheet) document.body.append(UI.sheet());
+  }
+
+  // ============================================================
+  // CLEANER VIEW
+  // ============================================================
+  function myJobs() { return S.jobs.filter(j => j.asg.some(a => a.c === UI.who)); }
+  function cleanerView() {
+    const box = el('div', 'phone');
+    const head = el('div', 'ph-head');
+    const h = el('div'); h.append(el('h1', null, t('title')), el('div', 'who', cl(UI.who).name));
+    head.append(h); box.append(head);
+    const langs = el('div', 'langs'); langs.setAttribute('aria-label', 'Language');
+    LANGS.forEach(([k, n]) => { const b = el('button', null, n); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.lang === k)); b.onclick = () => { UI.lang = k; render(); }; langs.append(b); });
+    box.append(langs);
+
+    const waitN = myJobs().filter(j => j.asg.find(a => a.c === UI.who).st === 'wait').length;
+    const tabs = el('div', 'ctabs');
+    [['jobs', 'cal'], ['guide', 'book'], ['pay', 'yen']].forEach(([k, ic]) => {
+      const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.ctab === k));
+      const d = el('span', 'dot'); d.append(icon(ic)); if (k === 'jobs' && waitN) d.append(el('span', 'badge', String(waitN)));
+      b.append(d, el('span', null, t(k))); b.onclick = () => { UI.ctab = k; render(); }; tabs.append(b);
+    });
+    box.append(tabs);
+    if (UI.ctab === 'jobs') { box.append(viewToggle('C', [t('listV'), t('calV')])); box.append(...(UI.modeC === 'cal' ? cleanerCalendar() : cleanerJobs())); }
+    if (UI.ctab === 'guide') box.append(...cleanerGuide());
+    if (UI.ctab === 'pay') box.append(...cleanerPay());
+    return box;
+  }
+
+  function cleanerJobs() {
+    const mine = myJobs();
+    const me = (j) => j.asg.find(a => a.c === UI.who);
+    const need = mine.filter(j => me(j).st === 'wait');
+    const up = mine.filter(j => ['ok', 'work', 'cant'].includes(me(j).st)).sort((a, b) => a.date.localeCompare(b.date));
+    const fin = mine.filter(j => me(j).st === 'done').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+    const out = [];
+    if (need.length) { const s = el('div', 'sec-title alert', '● ' + t('need') + ' (' + need.length + ')'); out.push(s, ...need.map(jobCard)); }
+    out.push(el('div', 'sec-title', t('upcoming')));
+    out.push(...(up.length ? up.map(jobCard) : [el('div', 'empty', t('empty'))]));
+    if (fin.length) out.push(el('div', 'sec-title', t('donesec')), ...fin.map(jobCard));
+    return out;
+  }
+
+  function jobCard(j) {
+    const p = prop(j.prop), a = j.asg.find(x => x.c === UI.who);
+    const stMap = { wait: ['s-wait', t('wait'), 'st-wait'], ok: ['s-ok', t('ok'), 'st-ok'], work: ['s-work', t('work'), 'st-work'], done: ['s-done', t('done'), 'st-done'], cant: ['s-bad', t('cantSt'), 'st-bad'] };
+    const [pc, pl, bc] = stMap[a.st];
+    const c = el('article', 'card job ' + bc);
+    const top = el('div', 'job-top');
+    const left = el('div');
+    const d = el('div', 'job-date', dateFmt(j.date, UI.lang)); d.append(el('small', null, wdFmt(j.date, UI.lang)));
+    left.append(d, el('div', 'job-prop', j.prop));
+    const pill = el('span', 'pill ' + pc); pill.append(el('i'), document.createTextNode(pl));
+    top.append(left, pill); c.append(top);
+
+    const facts = el('div', 'facts');
+    const fact = (ic, v, l, tight) => { const f = el('div', 'fact' + (tight ? ' tight' : '')); f.append(icon(ic), el('div', 'v', v), el('div', 'l', l)); return f; };
+    const same = j.nextIn === j.date;
+    const nextLabel = !j.nextIn ? t('unknown') : same ? p.in : dateFmt(j.nextIn, UI.lang);
+    facts.append(
+      fact('out', p.out, t('out')),
+      fact('in', nextLabel, t('nextIn') + (same ? ' · ' + t('same') : ''), same),
+      fact('people', j.guests + (t('guests') ? ' ' + t('guests') : ''), t('guestsL')));
+    c.append(facts);
+
+    const others = j.asg.filter(x => x.c !== UI.who).map(x => cl(x.c).name);
+    if (others.length) c.append(el('div', 'with', t('with') + ': ' + others.join(', ')));
+
+    if (a.st === 'wait') {
+      const act = el('div', 'actions');
+      const no = el('button', 'btn ghost', t('cant')); no.type = 'button'; no.onclick = () => openCant(j);
+      const yes = el('button', 'btn big-ok', t('okBtn')); yes.type = 'button'; yes.onclick = () => openTime(j);
+      act.append(no, yes); c.append(act);
+    }
+    if (a.st === 'ok' || a.st === 'work') {
+      const pl2 = el('div', 'planned'); pl2.append(el('span', null, t('planned')), el('span', 't', a.plan));
+      const ch = el('button', 'btn ghost small', '✎'); ch.type = 'button'; ch.setAttribute('aria-label', 'change'); ch.style.marginLeft = 'auto'; ch.onclick = () => openTime(j);
+      if (a.st === 'ok') pl2.append(ch);
+      c.append(pl2);
+    }
+    if (a.st === 'ok') {
+      const b = el('button', 'btn big-start', t('start')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
+      b.onclick = () => { a.start = nowHM(); a.st = 'work'; render(); };
+      c.append(b);
+      if (t('protoNote')) c.append(el('div', 'log', t('protoNote')));
+    }
+    if (a.st === 'work') {
+      c.append(logLine(a));
+      const b = el('button', 'btn big-ok', t('finish')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
+      b.onclick = () => { a.end = nowHM(); a.st = 'done'; render(); };
+      c.append(b);
+    }
+    if (a.st === 'done') c.append(logLine(a));
+    return c;
+  }
+  function logLine(a) {
+    const l = el('div', 'log');
+    l.append(document.createTextNode(t('started') + ' ' + a.start + (a.end ? ' → ' + t('ended') + ' ' + a.end : '')));
+    const lm = lateMin(a); if (lm > 0) { l.append(document.createTextNode('  ')); l.append(el('span', 'late', '(' + lm + t('late') + ')')); }
+    return l;
+  }
+
+  function openTime(j) {
+    const p = prop(j.prop), a = j.asg.find(x => x.c === UI.who);
+    let chosen = a.plan || null;
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, t('pick')));
+      sh.append(el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang) + ' · ' + t('out') + ' ' + p.out + (j.nextIn === j.date ? ' / ' + t('nextIn') + ' ' + p.in : '')));
+      const grid = el('div', 'times');
+      const end = mins(p.in) - 120;
+      for (let m = mins(p.out); m <= end; m += 30) {
+        const v = hm(m); const b = el('button', null, v); b.type = 'button'; b.setAttribute('aria-pressed', String(chosen === v));
+        b.onclick = () => { chosen = v; grid.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.textContent === v))); ok.disabled = false; };
+        grid.append(b);
+      }
+      sh.append(grid);
+      const row = el('div', 'row');
+      const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
+      const ok = el('button', 'btn big-ok', t('confirm')); ok.type = 'button'; ok.disabled = !chosen;
+      ok.onclick = () => { a.plan = chosen; a.st = 'ok'; UI.sheet = null; render(); };
+      row.append(cancel, ok); sh.append(row);
+      bg.append(sh); return bg;
+    };
+    render();
+  }
+  function openCant(j) {
+    const a = j.asg.find(x => x.c === UI.who);
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, t('confirmCant')), el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang)));
+      const row = el('div', 'row');
+      const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
+      const yes = el('button', 'btn', t('yes')); yes.type = 'button'; yes.style.background = 'var(--bad)'; yes.style.borderColor = 'var(--bad)';
+      yes.onclick = () => { a.st = 'cant'; delete a.plan; UI.sheet = null; render(); };
+      row.append(cancel, yes); sh.append(row); bg.append(sh); return bg;
+    };
+    render();
+  }
+
+  function myProps() { return S.props.filter(p => p.members.includes(UI.who)); }
+  function cleanerGuide() {
+    const out = [];
+    const mine = myProps();
+    if (!mine.length) return [el('div', 'empty', t('empty'))];
+    if (!mine.some(p => p.name === UI.gprop)) UI.gprop = mine[0].name;
+    const bar = el('div', 'g-props');
+    mine.forEach(p => { const b = el('button', null, p.name); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.gprop === p.name)); b.onclick = () => { UI.gprop = p.name; render(); }; bar.append(b); });
+    out.push(bar, el('div', 'g-hint', t('hint')));
+    S.guide[UI.gprop].forEach(ar => {
+      const c = el('article', 'card area');
+      const ph = el('div', 'photo');
+      if (ar.photo) { const img = el('img'); img.src = ar.photo; img.alt = ar.name[UI.lang] || ar.name.ja; ph.append(img); }
+      else { const inner = el('div'); inner.append(icon('cam'), el('div', null, t('photo'))); ph.append(inner); }
+      c.append(ph);
+      const b = el('div', 'area-body'); b.append(el('h4', null, ar.name[UI.lang] || ar.name.ja));
+      const ul = el('ul'); ar.notes.forEach(n => ul.append(el('li', n.warn ? 'warn' : null, (n.warn ? '! ' : '') + (n[UI.lang] || n.ja))));
+      b.append(ul); c.append(b); out.push(c);
+    });
+    return out;
+  }
+
+  function payFor(cid, month) {
+    const rows = [];
+    S.jobs.forEach(j => {
+      if (j.date.slice(0, 7) !== month) return;
+      const a = j.asg.find(x => x.c === cid && x.st === 'done'); if (!a) return;
+      const share = j.asg.length >= 2 ? 0.5 : 1;
+      rows.push({ j, amount: prop(j.prop).rate * share, half: share < 1 });
+    });
+    return rows.sort((a, b) => a.j.date.localeCompare(b.j.date));
+  }
+  // ============================================================
+  // OWNER VIEW
+  // ============================================================
+  const STB = {
+    none: ['sb-none', '!', '未依頼'], wait: ['sb-wait', '?', '返事待ち'], bad: ['sb-bad', '✕', '行けない'],
+    ok: ['sb-ok', '✓', 'OK'], work: ['sb-work', '▶', '清掃中'], done: ['sb-done', '✓', '完了'],
+  };
+  const unsettled = (j) => ['none', 'wait', 'bad'].includes(jobStatus(j));
+
+  function ownerView() {
+    const box = el('div', 'owner');
+    const h = el('div'); h.append(el('h1', null, '清掃スケジュール'), el('div', 'note', '今日:' + jaDate(TODAY) + '(試作品の日付)'));
+    box.append(h);
+    const tabs = el('div', 'otabs');
+    [['jobs', '今後の清掃'], ['past', '終わった清掃'], ['exp', '立替精算'], ['pay', '支払い・明細書'], ['cleaners', '清掃員'], ['settings', '施設と担当'], ['guide', 'ガイドの登録']].forEach(([k, l]) => {
+      const b = el('button', null, l); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.otab === k)); b.onclick = () => { UI.otab = k; UI.stmt = null; render(); };
+      if (k === 'exp') { const n = S.expenses.filter(e => e.status === 'pending').length; if (n) b.append(document.createTextNode(' (' + n + ')')); }
+      tabs.append(b);
+    });
+    box.append(tabs);
+    if (UI.otab === 'jobs') { box.append(viewToggle('O', ['リスト', 'カレンダー'])); box.append(...(UI.modeO === 'cal' ? [ownerUpcoming()[0], ...ownerCalendar()] : ownerUpcoming())); }
+    if (UI.otab === 'exp') box.append(ownerExpenses());
+    if (UI.otab === 'past') box.append(ownerJobs(S.jobs.filter(j => j.date < TODAY).reverse(), true));
+    if (UI.otab === 'pay') box.append(ownerPay());
+    if (UI.otab === 'cleaners') box.append(ownerCleaners());
+    if (UI.otab === 'settings') box.append(ownerSettings());
+    if (UI.otab === 'guide') box.append(ownerGuide());
+    return box;
+  }
+
+  function ownerUpcoming() {
+    const up = S.jobs.filter(j => j.date >= TODAY).sort((a, b) => a.date.localeCompare(b.date));
+    const week = up.filter(j => j.date <= WEEK_END), later = up.filter(j => j.date > WEEK_END);
+    const bad = week.filter(j => unsettled(j));
+    const cnt = (s) => week.filter(j => jobStatus(j) === s).length;
+    const ban = el('div', 'banner ' + (bad.length ? (cnt('bad') || cnt('none') ? 'badb' : 'warn') : 'good'));
+    if (bad.length) {
+      ban.append(el('div', 'h', '⚠ 1週間以内(' + jaDate(TODAY) + '〜' + jaDate(WEEK_END) + ')に、まだ確定していない清掃が ' + bad.length + '件 あります'));
+      const chips = el('div', 'chips');
+      [['none', '未依頼'], ['bad', '行けない連絡'], ['wait', '返事待ち']].forEach(([s, l]) => { const n = cnt(s); if (n) { const c = el('span', 'chip', l + ' ' + n + '件'); c.style.color = s === 'wait' ? 'var(--wait)' : 'var(--bad)'; chips.append(c); } });
+      ban.append(chips, el('div', 'note', '下のリストで「要確認」の清掃を依頼・再依頼してください。返事待ちが続く場合は、LINEで声をかけてください。'));
+    } else {
+      ban.append(el('div', 'h', '✓ 1週間以内の清掃は、すべて担当者からOKが出ています'));
+    }
+    const out = [ban];
+    const head = (t1, t2) => { const s = el('div', 'sec-h', t1); s.append(el('small', null, t2)); return s; };
+    out.push(head('1週間以内', jaDate(TODAY) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件'), ownerJobs(week, false, true));
+    out.push(head('それ以降', later.length + '件'), ownerJobs(later, false, false));
+    return out;
+  }
+
+  function ownerJobs(list, past, inWeek) {
+    const wrap = el('div', 'olist');
+    list.forEach(j => {
+      const p = prop(j.prop), s = jobStatus(j);
+      const urgent = inWeek && unsettled(j);
+      const c = el('article', 'card ojob' + (urgent ? ' urgent' + (s !== 'wait' ? ' bad' : '') : ''));
+      const [bc, g, lbl] = STB[s];
+      const sb = el('div', 'stblock ' + bc); sb.append(el('div', 'g', g), el('div', 'l', lbl)); c.append(sb);
+      const body = el('div', 'body');
+      const d = el('div', 'd', jaDate(j.date) + ' ' + j.prop);
+      if (urgent) d.append(el('span', 'tag' + (s === 'wait' ? ' w' : ''), '要確認'));
+      body.append(d);
+      const meta = el('div', 'meta');
+      const same = j.nextIn === j.date;
+      meta.append(document.createTextNode('OUT ' + p.out + ' → 次のIN '));
+      meta.append(same ? el('span', 'tight', '当日 ' + p.in) : document.createTextNode(j.nextIn ? jaDate(j.nextIn) : '未定'));
+      meta.append(document.createTextNode(' · 次のお客様 ' + j.guests + '人'));
+      meta.append(el('span', 'sample', 'サンプル'));
+      body.append(meta);
+      const who = el('div', 'who');
+      if (!j.asg.length) who.append(el('span', 'note', '担当者が決まっていません'));
+      j.asg.forEach(a => {
+        const map = { wait: ['s-wait', '返事待ち'], ok: ['s-ok', 'OK'], work: ['s-work', '清掃中'], done: ['s-done', '完了'], cant: ['s-bad', '行けない'] };
+        const span = el('span'); span.style.display = 'inline-flex'; span.style.gap = '6px'; span.style.alignItems = 'center';
+        span.append(el('span', 'nm', cl(a.c).name), pillEl(...map[a.st]));
+        const tm = el('span', 'tm');
+        if (a.plan) tm.append(document.createTextNode('予定 ' + a.plan));
+        if (a.start) tm.append(document.createTextNode(' / 開始 ' + a.start));
+        if (a.end) tm.append(document.createTextNode(' / 完了 ' + a.end));
+        const lm = lateMin(a); if (lm > 0) tm.append(document.createTextNode(' '), el('span', 'late', lm + '分遅れ'));
+        span.append(tm); who.append(span);
+      });
+      if (j.asg.length >= 2) who.append(el('span', 'note', '2名(清掃料は折半)'));
+      body.append(who); c.append(body);
+      const act = el('div', 'act');
+      if (!past && s !== 'done') {
+        const b = el('button', 'btn small ' + (s === 'none' || s === 'bad' ? '' : 'ghost'), s === 'none' ? '依頼する' : s === 'bad' ? '再依頼' : '変更');
+        b.type = 'button'; b.onclick = () => openAssign(j); act.append(b);
+      }
+      c.append(act);
+      wrap.append(c);
+    });
+    if (!list.length) wrap.append(el('div', 'empty', '該当する清掃はありません'));
+    return wrap;
+  }
+  const pillEl = (cls, text) => { const p = el('span', 'pill ' + cls); p.append(el('i'), document.createTextNode(text)); return p; };
+
+  function openAssign(j) {
+    const p = prop(j.prop);
+    const sel = new Set(j.asg.filter(a => a.st !== 'cant').map(a => a.c));
+    if (!sel.size && !j.asg.length) sel.add(p.main);
+    let showOthers = false;
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, '清掃を依頼する'), el('div', 'muted', jaDate(j.date) + ' ' + j.prop + '(最大2名)'));
+      const list = el('div', 'picklist');
+      const boxes = [];
+      const sync = () => boxes.forEach(i => { i.disabled = !i.checked && sel.size >= 2; });
+      const row = (c, outside) => {
+        const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = sel.has(c.id); boxes.push(cb);
+        const was = j.asg.find(a => a.c === c.id);
+        cb.onchange = () => { if (cb.checked) sel.add(c.id); else sel.delete(c.id); sync(); go.disabled = !sel.size; };
+        lab.append(cb, el('span', null, c.name + '(' + LANG_JA[c.lang] + ')'));
+        if (was && was.st === 'cant') lab.append(el('span', 'pill s-bad', '行けない'));
+        if (p.main === c.id) lab.append(el('span', 'main', 'メイン担当'));
+        if (outside) lab.append(el('span', 'main', '担当に追加'));
+        return lab;
+      };
+      const members = S.cleaners.filter(c => p.members.includes(c.id));
+      const others = S.cleaners.filter(c => !p.members.includes(c.id));
+      list.append(el('div', 'sub', 'この施設の担当'));
+      members.forEach(c => list.append(row(c, false)));
+      if (others.length) {
+        if (showOthers || others.some(c => sel.has(c.id))) {
+          list.append(el('div', 'sub', 'この施設の担当ではない清掃員(選ぶと、この施設の担当にも追加されます)'));
+          others.forEach(c => list.append(row(c, true)));
+        } else {
+          const more = el('button', 'linkbtn', '担当以外の清掃員にも依頼する'); more.type = 'button'; more.onclick = () => { showOthers = true; render(); };
+          list.append(more);
+        }
+      }
+      sh.append(list, el('div', 'note', '依頼すると、清掃員の画面に「返事をしてください」と表示されます。本番ではメールやLINEでもお知らせします。'));
+      const r = el('div', 'row');
+      const cancel = el('button', 'btn ghost', 'やめる'); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
+      const go = el('button', 'btn', '依頼する'); go.type = 'button'; go.disabled = !sel.size;
+      go.onclick = () => {
+        sel.forEach(id => { if (!p.members.includes(id)) p.members.push(id); });
+        const keep = j.asg.filter(a => sel.has(a.c) && a.st !== 'cant');
+        const added = [...sel].filter(id => !keep.some(a => a.c === id)).map(id => ({ c: id, st: 'wait' }));
+        j.asg = keep.concat(added); UI.sheet = null; render();
+      };
+      r.append(cancel, go); sh.append(r);
+      bg.append(sh); setTimeout(sync, 0); return bg;
+    };
+    render();
+  }
+
+  function propChecks(selected, onToggle) {
+    const box = el('div', 'checks');
+    S.props.forEach(p => {
+      const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = selected(p);
+      cb.onchange = () => onToggle(p, cb.checked);
+      lab.append(cb, document.createTextNode(p.name)); box.append(lab);
+    });
+    return box;
+  }
+
+  function ownerCleaners() {
+    const wrap = el('div', 'mgr');
+    wrap.append(el('div', 'note', '清掃員ごとに、表示する言語・連絡方法・担当する施設を設定します。清掃員の画面には、担当施設の清掃とガイドだけが表示されます。'));
+    S.cleaners.forEach(c => {
+      const card = el('div', 'card mgr-row');
+      const top = el('div', 'top'); top.append(el('span', 'nm', c.name));
+      const ls = el('select'); ls.setAttribute('aria-label', c.name + ' の言語');
+      LANGS.forEach(([k, n]) => { const o = el('option', null, n + '(' + LANG_JA[k] + ')'); o.value = k; ls.append(o); }); ls.value = c.lang;
+      ls.onchange = () => { c.lang = ls.value; };
+      const cs = el('select'); cs.setAttribute('aria-label', c.name + ' の連絡方法');
+      ['LINE', 'メール'].forEach(v => { const o = el('option', null, '連絡:' + v); o.value = v; cs.append(o); }); cs.value = c.contact;
+      cs.onchange = () => { c.contact = cs.value; };
+      top.append(ls, cs); card.append(top);
+      card.append(el('div', 'note', '担当施設'));
+      card.append(propChecks(p => p.members.includes(c.id), (p, on) => {
+        if (on && !p.members.includes(c.id)) p.members.push(c.id);
+        if (!on) { p.members = p.members.filter(x => x !== c.id); if (p.main === c.id) p.main = p.members[0] || null; }
+      }));
+      wrap.append(card);
+    });
+    // add form
+    const add = el('div', 'card mgr-row');
+    add.append(el('div', 'nm', '清掃員を追加'));
+    const grid = el('div', 'form-grid');
+    const f = (label, input) => { const l = el('label', 'field'); l.append(document.createTextNode(label), input); return l; };
+    const nm = el('input'); nm.type = 'text'; nm.placeholder = '例:Nguyen';
+    const lg = el('select'); LANGS.forEach(([k, n]) => { const o = el('option', null, n + '(' + LANG_JA[k] + ')'); o.value = k; lg.append(o); });
+    const ct = el('select'); ['LINE', 'メール'].forEach(v => { const o = el('option', null, v); o.value = v; ct.append(o); });
+    grid.append(f('名前', nm), f('表示する言語', lg), f('連絡方法', ct));
+    add.append(grid, el('div', 'note', '担当施設'));
+    const pick = new Set();
+    add.append(propChecks(() => false, (p, on) => { if (on) pick.add(p.name); else pick.delete(p.name); }));
+    const msg = el('div', 'note');
+    const btn = el('button', 'btn', '追加する'); btn.type = 'button'; btn.style.alignSelf = 'flex-start';
+    btn.onclick = () => {
+      const name = nm.value.trim(); if (!name) { msg.textContent = '名前を入力してください。'; nm.focus(); return; }
+      const id = 'c' + Date.now();
+      S.cleaners.push({ id, name, lang: lg.value, contact: ct.value });
+      S.props.forEach(p => { if (pick.has(p.name)) p.members.push(id); });
+      render();
+    };
+    add.append(btn, msg, el('div', 'note', '本番では、追加するとログイン用の案内がメール(またはLINE)で届きます。'));
+    wrap.append(add);
+    return wrap;
+  }
+
+  function ownerSettings() {
+    const card = el('div', 'card panel');
+    card.append(el('h2', null, '施設と担当'));
+    const tw = el('div', 'table-wrap'); const tb = el('table');
+    const hr = el('tr'); ['施設', 'OUT〜IN', '清掃料(1回)', '担当する清掃員', 'メイン担当'].forEach(x => hr.append(el('th', null, x)));
+    const thead = el('thead'); thead.append(hr); const body = el('tbody');
+    S.props.forEach(p => {
+      const tr = el('tr'); tr.append(el('td', null, p.name));
+      const td1 = el('td'); const s1 = el('select'); [['10:00', '16:00'], ['11:00', '15:00']].forEach(([o, i]) => { const op = el('option', null, o + '〜' + i); op.value = o; s1.append(op); });
+      s1.value = p.out; s1.setAttribute('aria-label', p.name + ' OUT〜IN');
+      s1.onchange = () => { p.out = s1.value; p.in = s1.value === '10:00' ? '16:00' : '15:00'; };
+      td1.append(s1); tr.append(td1);
+      const td2 = el('td'); const inp = el('input'); inp.type = 'number'; inp.step = '500'; inp.value = p.rate; inp.setAttribute('aria-label', p.name + ' 清掃料');
+      inp.onchange = () => { p.rate = Number(inp.value) || 0; }; td2.append(inp); tr.append(td2);
+      const td3 = el('td'); td3.style.whiteSpace = 'normal'; const ch = el('div', 'checks');
+      S.cleaners.forEach(c => {
+        const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = p.members.includes(c.id);
+        cb.onchange = () => { if (cb.checked) p.members.push(c.id); else { p.members = p.members.filter(x => x !== c.id); if (p.main === c.id) p.main = p.members[0] || null; } render(); };
+        lab.append(cb, document.createTextNode(c.name)); ch.append(lab);
+      });
+      td3.append(ch); tr.append(td3);
+      const td4 = el('td'); const s3 = el('select');
+      S.cleaners.filter(c => p.members.includes(c.id)).forEach(c => { const op = el('option', null, c.name); op.value = c.id; s3.append(op); });
+      if (!p.members.length) { const op = el('option', null, '(担当なし)'); op.value = ''; s3.append(op); }
+      s3.value = p.main || ''; s3.setAttribute('aria-label', p.name + ' メイン担当'); s3.onchange = () => { p.main = s3.value; };
+      td4.append(s3); tr.append(td4);
+      body.append(tr);
+    });
+    tb.append(thead, body); tw.append(tb); card.append(tw);
+    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。メイン担当は依頼のときに最初から選ばれます。OUT〜IN・清掃料・担当はサンプルです。'));
+    return card;
+  }
+
+  function ownerGuide() {
+    const wrap = el('div', 'mgr');
+    const bar = el('div', 'g-props');
+    S.props.forEach(p => { const b = el('button', null, p.name); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.ogprop === p.name)); b.onclick = () => { UI.ogprop = p.name; render(); }; bar.append(b); });
+    wrap.append(bar, el('div', 'note', '場所ごとに「清掃後のあるべき姿」の写真と注意点を登録します。注意点は日本語で書けば、本番では清掃員の言語に自動で翻訳して表示します(試作品では、書き直した注意点は日本語のまま表示されます)。'));
+    const areas = S.guide[UI.ogprop];
+    areas.forEach((ar, ai) => {
+      const c = el('article', 'card g-edit');
+      const ph = el('label', 'photo'); ph.title = '写真を選ぶ';
+      const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
+      file.onchange = () => { const f = file.files && file.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { ar.photo = rd.result; render(); }; rd.readAsDataURL(f); };
+      if (ar.photo) { const img = el('img'); img.src = ar.photo; img.alt = ar.name.ja; ph.append(img); }
+      else { const inner = el('div'); inner.append(icon('cam'), el('div', null, 'タップして写真を選ぶ')); ph.append(inner); }
+      ph.append(file); c.append(ph);
+      const body = el('div', 'area-body');
+      const top = el('div'); top.style.display = 'flex'; top.style.gap = '8px'; top.style.alignItems = 'center';
+      const nameIn = el('input'); nameIn.type = 'text'; nameIn.value = ar.name.ja; nameIn.setAttribute('aria-label', '場所の名前');
+      nameIn.style.cssText = 'flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:7px 9px;font-weight:700;color:var(--fg)';
+      nameIn.onchange = () => { if (nameIn.value.trim() !== ar.name.ja) ar.name = { ja: nameIn.value.trim() || '場所' }; };
+      const delA = el('button', 'linkbtn del', '場所を削除'); delA.type = 'button'; delA.onclick = () => { areas.splice(ai, 1); render(); };
+      top.append(nameIn, delA); body.append(top);
+      const notes = el('div', 'notes'); notes.style.marginTop = '8px';
+      ar.notes.forEach((n, ni) => {
+        const r = el('div', 'nrow');
+        const tx = el('input'); tx.type = 'text'; tx.value = n.ja; tx.setAttribute('aria-label', '注意点');
+        tx.onchange = () => { if (tx.value !== n.ja) ar.notes[ni] = { ja: tx.value, warn: n.warn }; };
+        const wl = el('label'); const wc = el('input'); wc.type = 'checkbox'; wc.checked = !!n.warn; wc.onchange = () => { ar.notes[ni].warn = wc.checked; }; wl.append(wc, document.createTextNode('重要'));
+        const del = el('button', 'linkbtn del', '削除'); del.type = 'button'; del.onclick = () => { ar.notes.splice(ni, 1); render(); };
+        r.append(tx, wl, del); notes.append(r);
+      });
+      const addN = el('button', 'linkbtn', '+ 注意点を追加'); addN.type = 'button'; addN.style.alignSelf = 'flex-start';
+      addN.onclick = () => { ar.notes.push({ ja: '' }); render(); };
+      notes.append(addN); body.append(notes); c.append(body); wrap.append(c);
+    });
+    const addA = el('button', 'btn ghost', '+ 場所を追加'); addA.type = 'button'; addA.style.alignSelf = 'flex-start';
+    addA.onclick = () => { areas.push({ key: 'x' + Date.now(), name: { ja: '新しい場所' }, notes: [{ ja: '' }], photo: null }); render(); };
+    wrap.append(addA);
+    return wrap;
+  }
+
+  // ---------- shared: log, receipt sample, view mode ----------
+  const stamp = () => { const d = new Date(); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const addLog = (cid, who, text) => S.log.push({ cid, at: stamp(), who, text });
+  function receiptSVG(store, item, amount, date) {
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="320" viewBox="0 0 240 320"><rect width="240" height="320" fill="#fbfaf6"/>' +
+      '<text x="120" y="38" font-size="16" text-anchor="middle" font-family="sans-serif" fill="#222">' + esc(store) + '</text>' +
+      '<text x="120" y="58" font-size="10" text-anchor="middle" font-family="sans-serif" fill="#666">登録番号 T1234567890123(サンプル)</text>' +
+      '<text x="20" y="92" font-size="11" font-family="sans-serif" fill="#444">' + esc(date) + '</text>' +
+      '<line x1="20" y1="104" x2="220" y2="104" stroke="#bbb" stroke-dasharray="3 3"/>' +
+      '<text x="20" y="130" font-size="12" font-family="sans-serif" fill="#222">' + esc(item) + '</text>' +
+      '<line x1="20" y1="230" x2="220" y2="230" stroke="#bbb" stroke-dasharray="3 3"/>' +
+      '<text x="20" y="258" font-size="14" font-family="sans-serif" fill="#222">合計</text>' +
+      '<text x="220" y="258" font-size="16" text-anchor="end" font-family="sans-serif" fill="#222">¥' + Number(amount).toLocaleString('ja-JP') + '</text>' +
+      '<text x="20" y="280" font-size="10" font-family="sans-serif" fill="#666">(10%対象)</text>' +
+      '<text x="120" y="306" font-size="10" text-anchor="middle" font-family="sans-serif" fill="#aaa">サンプルのレシート画像</text></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+  const loadMode = (k) => { try { return localStorage.getItem('lz-mode-' + k) || 'list'; } catch (e) { return 'list'; } };
+  const saveMode = (k, v) => { try { localStorage.setItem('lz-mode-' + k, v); } catch (e) {} };
+  const CAL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+  const LIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>';
+  function viewToggle(key, labels) {
+    const box = el('div', 'vtoggle'); box.setAttribute('role', 'group');
+    [['list', LIST_ICON, labels[0]], ['cal', CAL_ICON, labels[1]]].forEach(([v, ic, l]) => {
+      const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(UI['mode' + key] === v));
+      const s = el('span'); s.innerHTML = ic; b.append(s.firstChild, document.createTextNode(l)); // static icon markup
+      b.onclick = () => { UI['mode' + key] = v; saveMode(key, v); render(); }; box.append(b);
+    });
+    return box;
+  }
+  const addMonth = (m, n) => { let y = +m.slice(0, 4), mo = +m.slice(5, 7) + n; while (mo > 12) { y++; mo -= 12; } while (mo < 1) { y--; mo += 12; } return y + '-' + String(mo).padStart(2, '0'); };
+  // items(date) -> [{ cls, label }]
+  function calendar(key, items, lang, compact) {
+    const month = UI['cal' + key];
+    const card = el('div', 'card cal');
+    const head = el('div', 'cal-head');
+    const prev = el('button', null, '‹'); prev.type = 'button'; prev.setAttribute('aria-label', 'previous month'); prev.onclick = () => { UI['cal' + key] = addMonth(month, -1); render(); };
+    const next = el('button', null, '›'); next.type = 'button'; next.setAttribute('aria-label', 'next month'); next.onclick = () => { UI['cal' + key] = addMonth(month, 1); render(); };
+    let title = month;
+    try { title = new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { year: 'numeric', month: 'long' }).format(new Date(month + '-01T00:00:00')); } catch (e) {}
+    head.append(prev, el('b', null, title), next); card.append(head);
+    const grid = el('div', 'cal-grid');
+    for (let i = 0; i < 7; i++) {
+      let w = '日月火水木金土'[i];
+      try { w = new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { weekday: 'narrow' }).format(new Date(Date.UTC(2026, 9, 4 + i, 12))); } catch (e) {}
+      grid.append(el('div', 'cal-wd' + (i === 0 ? ' sun' : ''), w));
+    }
+    const first = new Date(month + '-01T00:00:00');
+    const start = new Date(first); start.setDate(1 - first.getDay());
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (i >= 35 && ds.slice(0, 7) !== month) break;
+      const cell = el('button', 'cal-day' + (ds.slice(0, 7) !== month ? ' out' : '') + (ds === TODAY ? ' today' : '')); cell.type = 'button';
+      cell.setAttribute('aria-pressed', String(UI['sel' + key] === ds));
+      cell.append(el('span', 'n', String(d.getDate())));
+      const its = items(ds);
+      if (compact) { const dots = el('div', 'cal-dots'); its.forEach(it => { const i2 = el('i', it.cls); dots.append(i2); }); if (its.length) cell.append(dots); }
+      else its.slice(0, 3).forEach(it => cell.append(el('span', 'cal-chip ' + it.cls, it.label)));
+      if (!compact && its.length > 3) cell.append(el('span', 'note', '+' + (its.length - 3)));
+      cell.setAttribute('aria-label', ds + ' ' + its.length);
+      cell.onclick = () => { UI['sel' + key] = ds; render(); };
+      grid.append(cell);
+    }
+    card.append(grid);
+    return card;
+  }
+  const calLegend = (pairs) => { const l = el('div', 'cal-legend'); pairs.forEach(([cls, t1]) => { const s = el('span'); s.append(el('i', cls), document.createTextNode(t1)); l.append(s); }); return l; };
+
+  // ---------- cleaner: calendar + pay with reimbursements ----------
+  const MY_CLS = { wait: 'sb-wait', ok: 'sb-ok', work: 'sb-work', done: 'sb-done', cant: 'sb-bad' };
+  function cleanerCalendar() {
+    const mine = myJobs(); const me = (j) => j.asg.find(a => a.c === UI.who);
+    const out = [calendar('C', (ds) => mine.filter(j => j.date === ds).map(j => ({ cls: MY_CLS[me(j).st], label: j.prop })), UI.lang, true)];
+    out[0].append(calLegend([['sb-wait', t('wait')], ['sb-ok', t('ok')], ['sb-done', t('done')], ['sb-bad', t('cantSt')]]));
+    const sel = UI.selC; const day = mine.filter(j => j.date === sel);
+    out.push(el('div', 'sec-title', dateFmt(sel, UI.lang) + ' ' + wdFmt(sel, UI.lang)));
+    out.push(...(day.length ? day.map(jobCard) : [el('div', 'empty', t('empty'))]));
+    return out;
+  }
+  const expFor = (cid, month, status) => S.expenses.filter(e => e.c === cid && e.date.slice(0, 7) === month && (!status || e.status === status));
+  function cleanerPay() {
+    const month = TODAY.slice(0, 7);
+    const rows = payFor(UI.who, month);
+    const fee = rows.reduce((s, r) => s + r.amount, 0);
+    const exps = expFor(UI.who, month);
+    const reimb = exps.filter(e => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
+    const top = el('div', 'card pay-total');
+    top.append(el('div', 'muted', t('totalPay')), el('div', 'v', yen(fee + reimb)));
+    const br = el('div', 'card breakdown');
+    const r1 = el('div', 'pay-row'); r1.append(el('span', null, t('fee') + ' (' + rows.length + ' ' + t('times') + ')'), el('b', null, yen(fee)));
+    const r2 = el('div', 'pay-row'); r2.append(el('span', null, t('reimb')), el('b', null, yen(reimb)));
+    br.append(r1, r2);
+    const key = UI.who + '|' + month;
+    const cb = el('div', 'card confirm-box');
+    if (S.confirms[key]) cb.append(el('div', 'confirmed', '✓ ' + t('confirmedAt') + ' ' + S.confirms[key]));
+    else { const b = el('button', 'btn', t('confirmBtn')); b.type = 'button'; b.onclick = () => { S.confirms[key] = stamp(); addLog(UI.who, cl(UI.who).name, '明細の内容を確認'); render(); }; cb.append(b); }
+    const eh = el('div', 'sec-title', t('expTitle'));
+    const add = el('button', 'btn ghost', '+ ' + t('addExp')); add.type = 'button'; add.onclick = () => openExpense(null);
+    const elist = el('div', 'olist');
+    if (!exps.length) elist.append(el('div', 'empty', t('noExp')));
+    exps.slice().sort((a, b) => b.date.localeCompare(a.date)).forEach(e => elist.append(expCard(e, false)));
+    const fh = el('div', 'sec-title', t('feeList'));
+    const list = el('div', 'card');
+    if (!rows.length) list.append(el('div', 'empty', t('empty')));
+    rows.forEach(r => {
+      const row = el('div', 'pay-row');
+      const l = el('div'); l.append(el('div', null, dateFmt(r.j.date, UI.lang) + ' ' + r.j.prop)); if (r.half) l.append(el('div', 'half', t('half')));
+      row.append(l, el('div', 'tnum', yen(r.amount))); list.append(row);
+    });
+    return [top, br, cb, eh, add, elist, fh, list];
+  }
+  function expStatusPill(e, ja) {
+    const m = { pending: ['s-wait', ja ? '確認待ち' : t('st_pending')], approved: ['s-done', ja ? '承認済み' : t('st_approved')], returned: ['s-bad', ja ? '差し戻し' : t('st_returned')] };
+    return pillEl(...m[e.status]);
+  }
+  function expCard(e, owner) {
+    const c = el('article', 'card exp');
+    const th = el('button', 'thumb'); th.type = 'button'; th.setAttribute('aria-label', 'receipt');
+    const img = el('img'); img.src = e.photo; img.alt = 'receipt'; th.append(img); th.onclick = () => openImage(e.photo); c.append(th);
+    const mid = el('div');
+    mid.append(el('div', 't1', e.store || '—'), el('div', 't2', [owner ? jaDate(e.date) : dateFmt(e.date, UI.lang), e.item, e.prop].filter(Boolean).join(' · ')));
+    if (owner) mid.append(el('div', 't2', '清掃員:' + cl(e.c).name));
+    const st = el('div'); st.style.marginTop = '4px'; st.append(expStatusPill(e, owner)); mid.append(st);
+    c.append(mid, el('div', 'amt', yen(e.amount)));
+    if (e.status === 'returned' && e.reason) {
+      const rs = el('div', 'reason', (owner ? '差し戻しの理由' : t('reason')) + ':' + e.reason); c.append(rs);
+      if (!owner) { const b = el('button', 'btn small', t('resend')); b.type = 'button'; b.style.gridColumn = '2 / -1'; b.style.justifySelf = 'start'; b.onclick = () => openExpense(e); c.append(b); }
+    }
+    if (owner) c.append(ownerExpFields(e));
+    return c;
+  }
+  function openImage(src) {
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = () => { UI.sheet = null; render(); };
+      const sh = el('div', 'sheet'); const img = el('img', 'pv'); img.src = src; img.alt = 'receipt'; img.style.maxHeight = '70vh';
+      sh.append(img); bg.append(sh); return bg;
+    };
+    render();
+  }
+  function openExpense(existing) {
+    const mine = myProps();
+    const d = existing ? { ...existing } : { date: TODAY, amount: '', store: '', item: '', prop: (mine[0] || S.props[0]).name, photo: null };
+    let err = '';
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, t('addExp')));
+      const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.setAttribute('capture', 'environment'); file.hidden = true;
+      file.onchange = () => { const f = file.files && file.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { d.photo = rd.result; render(); }; rd.readAsDataURL(f); };
+      const shot = el('label', 'shot'); shot.append(icon('cam'), document.createTextNode(d.photo ? t('retake') : t('takePhoto')), file);
+      if (d.photo) { const pv = el('img', 'pv'); pv.src = d.photo; pv.alt = t('receipt'); sh.append(pv); }
+      sh.append(shot);
+      const f = (label, inp) => { const l = el('label', 'field'); l.append(document.createTextNode(label), inp); return l; };
+      const di = el('input'); di.type = 'date'; di.value = d.date; di.onchange = () => { d.date = di.value || TODAY; };
+      const ai = el('input'); ai.type = 'number'; ai.inputMode = 'numeric'; ai.min = '0'; ai.value = d.amount; ai.oninput = () => { d.amount = ai.value; };
+      const si = el('input'); si.type = 'text'; si.value = d.store; si.oninput = () => { d.store = si.value; };
+      const ii = el('input'); ii.type = 'text'; ii.value = d.item; ii.oninput = () => { d.item = ii.value; };
+      const ps = el('select'); (mine.length ? mine : S.props).forEach(p => { const o = el('option', null, p.name); o.value = p.name; ps.append(o); }); ps.value = d.prop; ps.onchange = () => { d.prop = ps.value; };
+      sh.append(f(t('amount'), ai), f(t('pdate'), di), f(t('store'), si), f(t('item'), ii), f(t('forProp'), ps));
+      if (err) { const m = el('div', 'msg', err); m.style.color = 'var(--bad)'; m.style.fontWeight = '700'; sh.append(m); }
+      const row = el('div', 'row');
+      const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
+      const go = el('button', 'btn big-ok', t('submit')); go.type = 'button';
+      go.onclick = () => {
+        const amt = Number(d.amount);
+        if (!d.photo || !(amt > 0)) { err = t('needPhoto'); render(); return; }
+        if (existing) { Object.assign(existing, { ...d, amount: amt, status: 'pending', reason: '' }); addLog(UI.who, cl(UI.who).name, '立替を修正して再提出(' + yen(amt) + ')'); }
+        else { S.expenses.push({ id: 'e' + Date.now(), c: UI.who, ...d, amount: amt, status: 'pending', invoiceNo: '', taxRate: '10' }); addLog(UI.who, cl(UI.who).name, '立替を登録(' + yen(amt) + ' ' + (d.store || '') + ')'); }
+        UI.sheet = null; render();
+      };
+      row.append(cancel, go); sh.append(row); bg.append(sh); return bg;
+    };
+    render();
+  }
+
+  // ---------- owner: calendar, expenses, statements ----------
+  function ownerCalendar() {
+    const up = S.jobs;
+    const cal = calendar('O', (ds) => up.filter(j => j.date === ds).map(j => ({ cls: STB[jobStatus(j)][0], label: j.prop.split(' ')[0] })), 'ja', false);
+    cal.append(calLegend([['sb-none', '未依頼'], ['sb-wait', '返事待ち'], ['sb-bad', '行けない'], ['sb-ok', 'OK'], ['sb-done', '完了']]));
+    const sel = UI.selO; const day = S.jobs.filter(j => j.date === sel);
+    const h = el('div', 'sec-h', jaDate(sel) + 'の清掃'); h.append(el('small', null, day.length + '件'));
+    return [cal, h, ownerJobs(day, sel < TODAY, sel >= TODAY && sel <= WEEK_END)];
+  }
+  function ownerExpFields(e) {
+    const box = el('div', 'owner-fields');
+    const f = (label, inp) => { const l = el('label', 'field'); l.append(document.createTextNode(label), inp); return l; };
+    const inv = el('input'); inv.type = 'text'; inv.placeholder = 'T + 13桁'; inv.value = e.invoiceNo || ''; inv.oninput = () => { e.invoiceNo = inv.value.trim(); };
+    const tx = el('select'); [['10', '10%'], ['8', '8%(軽減)'], ['mix', '10%と8%が混在']].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; tx.append(o); }); tx.value = e.taxRate || '10'; tx.onchange = () => { e.taxRate = tx.value; };
+    box.append(f('インボイス登録番号(レシートを見て入力)', inv), f('税率', tx));
+    if (e.status === 'pending') {
+      const rs = el('input'); rs.type = 'text'; rs.placeholder = '差し戻す場合の理由';
+      const ok = el('button', 'btn small', '承認'); ok.type = 'button'; ok.style.background = 'var(--done)'; ok.style.borderColor = 'var(--done)';
+      ok.onclick = () => { e.status = 'approved'; e.approvedAt = stamp(); addLog(e.c, 'オーナー', '立替を承認(' + yen(e.amount) + ' ' + e.store + ')'); render(); };
+      const ng = el('button', 'btn ghost small', '差し戻す'); ng.type = 'button';
+      ng.onclick = () => { if (!rs.value.trim()) { rs.focus(); rs.placeholder = '理由を入力してください'; return; } e.status = 'returned'; e.reason = rs.value.trim(); addLog(e.c, 'オーナー', '立替を差し戻し(理由:' + e.reason + ')'); render(); };
+      box.append(f('差し戻しの理由', rs), ok, ng);
+    } else if (e.status === 'approved') {
+      box.append(el('span', 'note', '承認日時 ' + (e.approvedAt || '')));
+    }
+    return box;
+  }
+  function ownerExpenses() {
+    const wrap = el('div', 'mgr');
+    const pend = S.expenses.filter(e => e.status === 'pending');
+    const ban = el('div', 'banner ' + (pend.length ? 'warn' : 'good'));
+    ban.append(el('div', 'h', pend.length ? '確認待ちの立替が ' + pend.length + '件 あります' : '✓ 確認待ちの立替はありません'));
+    ban.append(el('div', 'note', 'レシート画像を押すと大きく表示されます。内容が正しければ「承認」すると、その月の支払いに加わります。インボイス登録番号と税率は、経費処理の明細書に載ります。'));
+    wrap.append(ban);
+    const tabs = el('div', 'otabs');
+    [['pending', '確認待ち'], ['all', 'すべて']].forEach(([k, l]) => { const b = el('button', null, l); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.expFilter === k)); b.onclick = () => { UI.expFilter = k; render(); }; tabs.append(b); });
+    wrap.append(tabs);
+    const list = (UI.expFilter === 'pending' ? pend : S.expenses.slice()).sort((a, b) => b.date.localeCompare(a.date));
+    if (!list.length) wrap.append(el('div', 'empty', '該当する立替はありません'));
+    list.forEach(e => wrap.append(expCard(e, true)));
+    return wrap;
+  }
+  function ownerPay() {
+    if (UI.stmt) return statement(UI.stmt);
+    const month = TODAY.slice(0, 7);
+    const card = el('div', 'card panel');
+    card.append(el('h2', null, Number(month.slice(5)) + '月の支払い(清掃料+立替精算)'));
+    const tw = el('div', 'table-wrap'); const tb = el('table');
+    const hr = el('tr'); ['清掃員', '清掃', '清掃料', '立替精算', '支払合計', '本人確認', ''].forEach((x, i) => hr.append(el('th', i && i < 5 ? 'num' : null, x)));
+    const thead = el('thead'); thead.append(hr); const body = el('tbody');
+    let all = 0;
+    S.cleaners.forEach(c => {
+      const rows = payFor(c.id, month); const fee = rows.reduce((s, r) => s + r.amount, 0);
+      const reimb = expFor(c.id, month, 'approved').reduce((s, e) => s + e.amount, 0);
+      const pend = expFor(c.id, month, 'pending').length;
+      all += fee + reimb;
+      const tr = el('tr');
+      const rtd = el('td', 'num', yen(reimb)); if (pend) { rtd.append(el('div', 'note', '確認待ち ' + pend + '件')); }
+      const ctd = el('td', null, S.confirms[c.id + '|' + month] ? '✓ ' + S.confirms[c.id + '|' + month] : '未確認');
+      const btd = el('td'); const b = el('button', 'btn ghost small', '明細書'); b.type = 'button'; b.onclick = () => { UI.stmt = c.id; render(); }; btd.append(b);
+      tr.append(el('td', null, c.name), el('td', 'num', rows.length + '回'), el('td', 'num', yen(fee)), rtd, el('td', 'num', yen(fee + reimb)), ctd, btd);
+      body.append(tr);
+    });
+    const tr = el('tr'); const td = el('td', null, '合計'); td.style.fontWeight = '700'; const tdv = el('td', 'num', yen(all)); tdv.style.fontWeight = '700';
+    tr.append(td, el('td'), el('td'), el('td'), tdv, el('td'), el('td')); body.append(tr);
+    tb.append(thead, body); tw.append(tb); card.append(tw);
+    card.append(el('div', 'note', '清掃料は施設ごとの固定額で、2名で入った清掃は半額ずつです。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
+    return card;
+  }
+  function statement(cid) {
+    const month = TODAY.slice(0, 7), c = cl(cid);
+    const rows = payFor(cid, month), fee = rows.reduce((s, r) => s + r.amount, 0);
+    const exps = expFor(cid, month, 'approved'), reimb = exps.reduce((s, e) => s + e.amount, 0);
+    const lastDay = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate();
+    const payDay = addMonth(month, 1) + '-10';
+    const wrap = el('div', 'mgr');
+    const back = el('button', 'linkbtn', '← 支払い一覧に戻る'); back.type = 'button'; back.style.alignSelf = 'flex-start'; back.onclick = () => { UI.stmt = null; render(); };
+    wrap.append(back);
+    const s = el('div', 'card stmt');
+    s.append(el('h2', null, '支払明細書'));
+    const hd = el('div', 'hd');
+    const dl = (pairs) => { const d = el('dl'); pairs.forEach(([k, v]) => d.append(el('dt', null, k), el('dd', null, v))); return d; };
+    hd.append(
+      dl([['明細番号', 'LZ-' + month.replace('-', '') + '-' + cid.toUpperCase()], ['発行日', jaDate(TODAY)], ['対象期間', jaDate(month + '-01') + '〜' + jaDate(month + '-' + lastDay)], ['支払予定日', jaDate(payDay) + '(サンプル)']]),
+      dl([['支払先', c.name + ' 様'], ['住所', '(清掃員の登録情報から表示)'], ['発行者', 'Lazurite(事業者名・住所は設定で登録)'], ['区分', '清掃業務の報酬・立替金の精算']]));
+    s.append(hd);
+    const sum = el('div', 'sum');
+    [['清掃料', fee], ['立替精算(実費)', reimb], ['お支払い合計', fee + reimb]].forEach(([l, v]) => { const d = el('div'); d.append(el('div', 'l', l), el('div', 'v', yen(v))); sum.append(d); });
+    s.append(sum);
+    // fee table
+    s.append(el('h3', null, '1. 清掃料の明細(' + rows.length + '件)'));
+    const t1 = el('table'); const h1 = el('tr'); ['日付', '施設', '開始', '完了', '単価', '人数', '金額'].forEach((x, i) => h1.append(el('th', i >= 4 ? 'num' : null, x)));
+    const th1 = el('thead'); th1.append(h1); const b1 = el('tbody');
+    rows.forEach(r => { const a = r.j.asg.find(x => x.c === cid); const tr = el('tr'); tr.append(el('td', null, jaDate(r.j.date)), el('td', null, r.j.prop), el('td', null, a.start || '—'), el('td', null, a.end || '—'), el('td', 'num', yen(prop(r.j.prop).rate)), el('td', 'num', r.half ? '2名(折半)' : '1名'), el('td', 'num', yen(r.amount))); b1.append(tr); });
+    const f1 = el('tr'); const f1a = el('td', null, '小計'); f1a.colSpan = 6; f1a.style.fontWeight = '700'; const f1b = el('td', 'num', yen(fee)); f1b.style.fontWeight = '700'; f1.append(f1a, f1b); b1.append(f1);
+    t1.append(th1, b1); const w1 = el('div', 'table-wrap'); w1.append(t1); s.append(w1);
+    // reimbursement table
+    s.append(el('h3', null, '2. 立替金の精算明細(' + exps.length + '件)'));
+    if (exps.length) {
+      const t2 = el('table'); const h2 = el('tr'); ['購入日', 'お店', '登録番号', '品目', '施設', '税率', '金額', 'レシート'].forEach((x, i) => h2.append(el('th', i === 6 ? 'num' : null, x)));
+      const th2 = el('thead'); th2.append(h2); const b2 = el('tbody');
+      exps.forEach((e, i) => {
+        const tr = el('tr');
+        const rc = el('td'); const rb = el('button', 'linkbtn', 'R-' + String(i + 1).padStart(2, '0')); rb.type = 'button'; rb.onclick = () => openImage(e.photo); rc.append(rb);
+        tr.append(el('td', null, jaDate(e.date)), el('td', null, e.store), el('td', null, e.invoiceNo || '未入力'), el('td', null, e.item), el('td', null, e.prop), el('td', null, e.taxRate === 'mix' ? '10%/8%' : e.taxRate + '%'), el('td', 'num', yen(e.amount)), rc);
+        b2.append(tr);
+      });
+      const f2 = el('tr'); const f2a = el('td', null, '小計'); f2a.colSpan = 6; f2a.style.fontWeight = '700'; const f2b = el('td', 'num', yen(reimb)); f2b.style.fontWeight = '700'; f2.append(f2a, f2b, el('td')); b2.append(f2);
+      t2.append(th2, b2); const w2 = el('div', 'table-wrap'); w2.append(t2); s.append(w2);
+    } else s.append(el('div', 'note', '今月の承認済みの立替はありません。'));
+    // records
+    s.append(el('h3', null, '3. 確認の記録'));
+    const rec = el('dl', 'rec');
+    const conf = S.confirms[cid + '|' + month];
+    rec.append(el('dt', null, '清掃員の内容確認'), el('dd', null, conf ? '確認済み ' + conf + '(アプリで本人が確認)' : '未確認'));
+    rec.append(el('dt', null, '源泉徴収'), el('dd', null, '契約の形(雇用/業務委託)が決まったら、必要に応じて欄を追加します'));
+    s.append(rec);
+    s.append(el('h3', null, '4. 変更履歴'));
+    const logs = S.log.filter(l => l.cid === cid);
+    const lt = el('div', 'note'); lt.style.display = 'flex'; lt.style.flexDirection = 'column'; lt.style.gap = '2px';
+    if (!logs.length) lt.append(el('span', null, '記録はありません'));
+    logs.forEach(l => lt.append(el('span', null, l.at + ' ' + l.who + ':' + l.text)));
+    s.append(lt);
+    const tools = el('div', 'tools');
+    const pb = el('button', 'btn', 'PDFで保存・印刷'); pb.type = 'button'; pb.disabled = true;
+    const cb = el('button', 'btn ghost', 'CSVで出力(税理士・会計ソフト用)'); cb.type = 'button'; cb.disabled = true;
+    tools.append(pb, cb, el('span', 'note', '試作品では押せません。本番アプリで使えるようにします。'));
+    s.append(tools);
+    wrap.append(s);
+    return wrap;
+  }
+
+  UI.modeO = loadMode('O'); UI.modeC = loadMode('C');
+  render();
+})();
+</script>
