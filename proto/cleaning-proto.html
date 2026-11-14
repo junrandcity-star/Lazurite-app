@@ -158,6 +158,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .stblock .l { font-size: .78rem; line-height: 1.25; }
 .sb-none { background: #c2410c; } .sb-wait { background: #d97706; } .sb-bad { background: #b91c1c; }
 .sb-ok { background: #1d5fb8; } .sb-work { background: #6b3fb5; } .sb-done { background: #23774f; }
+.sb-late { background: #c2410c; }
 .ojob .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .ojob .d { font-weight: 700; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ojob .tag { font-size: .72rem; font-weight: 700; color: #fff; background: var(--bad); border-radius: 4px; padding: 1px 6px; }
@@ -177,6 +178,18 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .banner .h { font-weight: 700; font-size: 1.02rem; }
 .banner .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .banner .chip { font-size: .82rem; background: var(--surface); border-radius: 999px; padding: 3px 10px; font-weight: 700; }
+.ojob .act { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+@media (max-width: 520px) { .ojob .act { flex-direction: row; flex-wrap: wrap; } }
+.follow { display: flex; flex-direction: column; gap: 6px; }
+.frow { background: var(--surface); border-radius: 10px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.frow .ft { flex: 1 1 220px; min-width: 0; }
+.frow .fb { display: flex; gap: 6px; flex-wrap: wrap; }
+.daylink { background: none; border: 0; padding: 0; font-weight: 700; color: var(--fg); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left; }
+.flash { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.rule { display: flex; flex-direction: column; gap: 8px; }
+.rule .step { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
+.rule .step b { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--surface); display: grid; place-items: center; font-size: .85rem; }
+.rule select { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 4px 8px; }
 .sec-h { font-size: .95rem; font-weight: 700; margin: 6px 2px -2px; display: flex; gap: 8px; align-items: baseline; }
 .sec-h small { font-weight: 400; color: var(--muted); font-size: .8rem; }
 .picklist .sub { font-size: .8rem; color: var(--muted); margin-top: 6px; }
@@ -310,9 +323,9 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   // jobs = real check-out dates from the reservation data; guests are sample values
   const BASE_JOBS = [
     ["RO1003","Rosy Days","2026-10-03","2026-10-03"],["SC1003","Scent of Asia","2026-10-03","2026-10-09"],["LA1004","Laughter","2026-10-04","2026-10-11"],["YO1004","Yokohama","2026-10-04","2026-10-10"],["ST1005","Stay Silky","2026-10-05","2026-10-05"],["RO1008","Rosy Days","2026-10-08","2026-10-10"],["SC1011","Scent of Asia","2026-10-11","2026-10-11"],["ST1011","Stay Silky","2026-10-11","2026-10-11"],["YO1011","Yokohama","2026-10-11","2026-10-11"],["SC1012","Scent of Asia","2026-10-12","2026-10-17"],["YO1012","Yokohama","2026-10-12","2026-10-17"],["ST1016","Stay Silky","2026-10-16","2026-10-17"],["LA1017","Laughter","2026-10-17","2026-10-17"],["LA1018","Laughter","2026-10-18","2026-10-24"],["SC1018","Scent of Asia","2026-10-18","2026-10-21"],["YO1018","Yokohama","2026-10-18","2026-10-24"],
-    ["RO1021","Rosy Days","2026-10-21","2026-10-23"],["ST1023","Stay Silky","2026-10-23","2026-10-24"],["SC1025","Scent of Asia","2026-10-25","2026-10-27"],["YO1025","Yokohama","2026-10-25",null],["LA1026","Laughter","2026-10-26","2026-10-28"],["RO1026","Rosy Days","2026-10-26","2026-10-26"],["ST1027","Stay Silky","2026-10-27","2026-10-27"],["LA1101","Laughter","2026-11-01",null],["PE1101","Pear Field","2026-11-01",null],["RO1101","Rosy Days","2026-11-01",null],["SC1101","Scent of Asia","2026-11-01",null],["ST1101","Stay Silky","2026-11-01",null]
+    ["YO1020","Yokohama","2026-10-20",null],["RO1021","Rosy Days","2026-10-21","2026-10-23"],["ST1023","Stay Silky","2026-10-23","2026-10-24"],["SC1025","Scent of Asia","2026-10-25","2026-10-27"],["YO1025","Yokohama","2026-10-25",null],["LA1026","Laughter","2026-10-26","2026-10-28"],["RO1026","Rosy Days","2026-10-26","2026-10-26"],["ST1027","Stay Silky","2026-10-27","2026-10-27"],["LA1101","Laughter","2026-11-01",null],["PE1101","Pear Field","2026-11-01",null],["RO1101","Rosy Days","2026-11-01",null],["SC1101","Scent of Asia","2026-11-01",null],["ST1101","Stay Silky","2026-11-01",null]
   ];
-  const GUESTS = [2,4,3,2,2,3,4,2,1,3,2,2,5,3,4,2,3,2,4,1,5,3,2,4,2,3,4,2];
+  const GUESTS = [2,4,3,2,2,3,4,2,1,3,2,2,5,3,4,2,2,3,2,4,1,5,3,2,4,2,3,4,2];
   function initialState() {
     const jobs = BASE_JOBS.map(([id, prop, date, nextIn], i) => ({ id, prop, date, nextIn, guests: GUESTS[i], asg: [] }));
     const J = Object.fromEntries(jobs.map(j => [j.id, j]));
@@ -323,12 +336,15 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     done('ST1011','anan','11:00','11:00','13:40'); done('YO1011','maria','10:00','10:00','12:20'); done('SC1012','bikash','10:30','10:30','13:30');
     done('YO1012','sato','10:00','10:05','12:40'); done('ST1016','anan','11:00','11:35','14:30'); done('LA1017','bikash','10:00','10:00','14:10'); done('LA1017','sato','10:00','10:10','14:10');
     done('LA1018','bikash','10:30','10:30','14:00'); done('SC1018','maria','10:00','10:20','13:40'); done('YO1018','sato','10:00','10:00','12:30');
-    J.RO1021.asg.push({ c: 'linh', st: 'ok', plan: '11:30' });
-    J.ST1023.asg.push({ c: 'anan', st: 'wait' });
-    J.SC1025.asg.push({ c: 'bikash', st: 'ok', plan: '10:30' }, { c: 'maria', st: 'wait' });
-    J.YO1025.asg.push({ c: 'maria', st: 'cant' });
-    J.RO1026.asg.push({ c: 'anan', st: 'wait' });
-    J.ST1027.asg.push({ c: 'anan', st: 'ok', plan: '11:00' });
+    J.YO1020.asg.push({ c: 'maria', st: 'wait', sent: TODAY, auto: true }); // booked today for tomorrow
+    J.RO1021.asg.push({ c: 'linh', st: 'ok', plan: '11:30', sent: '2026-10-08', auto: true });
+    J.ST1023.asg.push({ c: 'anan', st: 'wait', sent: '2026-10-14', auto: true });
+    J.SC1025.asg.push({ c: 'bikash', st: 'ok', plan: '10:30', sent: '2026-10-12', auto: true }, { c: 'maria', st: 'wait', sent: '2026-10-18' });
+    J.YO1025.asg.push({ c: 'maria', st: 'cant', sent: '2026-10-15', auto: true });
+    J.RO1026.asg.push({ c: 'linh', st: 'wait', sent: '2026-10-18', auto: true });
+    J.ST1027.asg.push({ c: 'anan', st: 'ok', plan: '11:00', sent: '2026-10-13', auto: true });
+    // every other upcoming check-out has already been sent to the property's main cleaner
+    jobs.forEach(j => { if (j.date >= TODAY && !j.asg.length) autoSend(j, PROPS, '2026-10-18'); });
     const guide = {};
     PROPS.forEach(p => { guide[p.name] = JSON.parse(JSON.stringify(AREAS)).map(a => ({ ...a, photo: null })); });
     const expenses = [
@@ -346,9 +362,14 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       { cid: 'maria', at: '10/04 15:10', who: 'Maria', text: '立替を登録(¥3,300 ニトリ)' },
       { cid: 'maria', at: '10/05 08:30', who: 'オーナー', text: '立替を差し戻し(理由:レシートの金額が読めません。撮り直してください。)' },
     ];
-    return { jobs, props: PROPS.map(p => ({ ...p, members: p.members.slice() })), cleaners: CLEANERS.map(c => ({ ...c })), guide, expenses, confirms: {}, log };
+    return { jobs, props: PROPS.map(p => ({ ...p, members: p.members.slice() })), cleaners: CLEANERS.map(c => ({ ...c })), guide, expenses, confirms: {}, log, rule: { replyDays: 2 } };
   }
-  const UI = { view: 'owner', who: 'anan', lang: 'th', ctab: 'jobs', gprop: null, otab: 'jobs', ogprop: 'Stay Silky', sheet: null, modeO: 'list', modeC: 'list', calO: '2026-10', calC: '2026-10', selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
+  // automatic request: goes to the main cleaner of the property
+  function autoSend(j, props, date) {
+    const p = props.find(x => x.name === j.prop);
+    if (p && p.main) j.asg.push({ c: p.main, st: 'wait', sent: date, auto: true });
+  }
+  const UI = { view: 'owner', who: 'anan', lang: 'th', ctab: 'jobs', gprop: null, otab: 'jobs', ogprop: 'Stay Silky', sheet: null, flash: null, modeO: 'cal', modeC: 'cal', calO: '2026-10', calC: '2026-10', selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
 
   // ---------- i18n (cleaner screen) ----------
   const LANGS = [['ja','日本語'],['en','English'],['th','ไทย'],['ne','नेपाली'],['vi','Tiếng Việt']];
@@ -406,9 +427,21 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   const wdFmt = (s, lang) => { const d = new Date(s + 'T00:00:00'); try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { weekday: 'short' }).format(d); } catch (e) { return ''; } };
   const jaDate = (s) => Number(s.slice(5, 7)) + '/' + Number(s.slice(8, 10)) + '(' + '日月火水木金土'[new Date(s + 'T00:00:00').getDay()] + ')';
   const lateMin = (a) => (a.plan && a.start ? mins(a.start) - mins(a.plan) : 0);
+  const dayDiff = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+  const md = (s) => Number(s.slice(5, 7)) + '/' + Number(s.slice(8, 10));
+  const waitDays = (a) => (a.st === 'wait' && a.sent ? dayDiff(a.sent, TODAY) : 0);
+  const isLate = (a) => a.st === 'wait' && waitDays(a) >= S.rule.replyDays; // no reply for N days
+  const addDays = (s0, n) => { const d = new Date(s0 + 'T00:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const REMIND_AFTER = 1; // days without a reply before the app nudges the cleaner by itself
+  const nudged = (a) => a.st === 'wait' && a.sent && waitDays(a) >= REMIND_AFTER;
+  // short notice: the cleaning is today or tomorrow and somebody has not replied yet
+  const isRush = (j) => j.date >= TODAY && dayDiff(TODAY, j.date) <= 1 && j.asg.some(a => a.st === 'wait');
+  const stuck = (j) => j.asg.filter(a => a.st === 'wait' && (isLate(a) || isRush(j)));
   const jobStatus = (j) => {
     if (!j.asg.length) return 'none';
     if (j.asg.some(a => a.st === 'cant')) return 'bad';
+    if (isRush(j)) return 'rush';
+    if (j.asg.some(isLate)) return 'late';
     if (j.asg.some(a => a.st === 'wait')) return 'wait';
     if (j.asg.every(a => a.st === 'done')) return 'done';
     if (j.asg.some(a => a.st === 'work')) return 'work';
@@ -431,7 +464,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   whoSel.onchange = () => { UI.who = whoSel.value; UI.lang = cl(UI.who).lang; render(); };
   $('v-owner').onclick = () => { UI.view = 'owner'; render(); };
   $('v-cleaner').onclick = () => { UI.view = 'cleaner'; UI.lang = cl(UI.who).lang; render(); };
-  $('reset').onclick = () => { S = initialState(); UI.sheet = null; render(); };
+  $('reset').onclick = () => { S = initialState(); UI.sheet = null; UI.flash = null; render(); };
 
   function render() {
     $('v-owner').setAttribute('aria-pressed', String(UI.view === 'owner'));
@@ -620,10 +653,50 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   // OWNER VIEW
   // ============================================================
   const STB = {
-    none: ['sb-none', '!', '未依頼'], wait: ['sb-wait', '?', '返事待ち'], bad: ['sb-bad', '✕', '行けない'],
+    none: ['sb-none', '!', '担当なし'], wait: ['sb-wait', '?', '返事待ち'], bad: ['sb-bad', '✕', '行けない'], late: ['sb-late', '!', '返事なし'], rush: ['sb-late', '!', '急ぎ'],
     ok: ['sb-ok', '✓', 'OK'], work: ['sb-work', '▶', '清掃中'], done: ['sb-done', '✓', '完了'],
   };
-  const unsettled = (j) => ['none', 'wait', 'bad'].includes(jobStatus(j));
+  const unsettled = (j) => ['none', 'wait', 'bad', 'late', 'rush'].includes(jobStatus(j));
+  const needsFollow = (j) => ['none', 'bad', 'late', 'rush'].includes(jobStatus(j)); // the owner has to act
+  const names = (list) => list.map(a => cl(a.c).name + ' さん').join('・');
+  function followReason(j) {
+    const s = jobStatus(j);
+    if (s === 'none') return 'メイン担当が決まっていないため、自動送信できていません。';
+    if (s === 'bad') return names(j.asg.filter(a => a.st === 'cant')) + 'から「行けない」と返事がありました。';
+    if (s === 'rush') { const w = stuck(j); return '清掃日が' + (j.date === TODAY ? '今日' : '明日') + 'です。' + names(w) + 'に ' + md(w[0].sent) + ' に送信済みですが、まだ返事がありません' + (w[0].remind ? '(再送 ' + w[0].remind + '回)' : '') + '。日が近いため、すぐに表示しています。'; }
+    const late = j.asg.filter(isLate);
+    return names(late) + 'に ' + md(late[0].sent) + ' に送信 → ' + waitDays(late[0]) + '日 返事がありません' + (late[0].remind ? '(再送 ' + late[0].remind + '回)' : '') + '。';
+  }
+  function followBtns(j) {
+    const s = jobStatus(j), out = [];
+    if (s === 'late' || s === 'rush') {
+      const r = el('button', 'btn ghost small', 'もう一度送る'); r.type = 'button';
+      r.onclick = () => {
+        const late = stuck(j);
+        UI.flash = jaDate(j.date) + ' ' + j.prop + ':' + names(late) + 'にもう一度送信しました。';
+        late.forEach(a => { a.sent = TODAY; a.remind = (a.remind || 0) + 1; });
+        render();
+      };
+      out.push(r);
+    }
+    const b = el('button', 'btn small', s === 'none' ? '依頼する' : '代わりの人に依頼'); b.type = 'button'; b.onclick = () => openAssign(j);
+    out.push(b);
+    return out;
+  }
+  const SIM = ['Pear Field', 'Yokohama', 'Laughter'];
+  let simN = 0;
+  function simNewBooking() {
+    const b = el('button', 'linkbtn', '(試作品)新しい予約が入ったときの動きを試す'); b.type = 'button'; b.style.alignSelf = 'flex-start';
+    b.onclick = () => {
+      const pn = SIM[simN % SIM.length]; simN++;
+      const j = { id: 'NEW' + simN, prop: pn, date: simN === 1 ? addDays(TODAY, 1) : addDays('2026-10-28', simN), nextIn: null, guests: 2, asg: [] };
+      autoSend(j, S.props, TODAY); S.jobs.push(j);
+      const m = prop(pn).main;
+      UI.flash = '新しい予約:' + jaDate(j.date) + ' ' + pn + ' のチェックアウト → ' + (m ? 'メイン担当の ' + cl(m).name + ' さんに自動で送信しました。' + (isRush(j) ? '清掃日が明日のため、「要フォロー」にも表示しています。' : '') : 'メイン担当が決まっていないため、送信できませんでした。');
+      UI.calO = j.date.slice(0, 7); UI.selO = j.date; render();
+    };
+    return b;
+  }
 
   function ownerView() {
     const box = el('div', 'owner');
@@ -636,7 +709,16 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       tabs.append(b);
     });
     box.append(tabs);
-    if (UI.otab === 'jobs') { box.append(viewToggle('O', ['リスト', 'カレンダー'])); box.append(...(UI.modeO === 'cal' ? [ownerUpcoming()[0], ...ownerCalendar()] : ownerUpcoming())); }
+    if (UI.otab === 'jobs') {
+      if (UI.flash) {
+        const f = el('div', 'banner good flash'); f.append(el('div', 'h', UI.flash));
+        const x = el('button', 'linkbtn', '閉じる'); x.type = 'button'; x.onclick = () => { UI.flash = null; render(); }; f.append(x); box.append(f);
+      }
+      box.append(viewToggle('O', ['リスト', 'カレンダー']));
+      const up = ownerUpcoming();
+      box.append(...(UI.modeO === 'cal' ? [up[0], ...ownerCalendar()] : up));
+      box.append(simNewBooking());
+    }
     if (UI.otab === 'exp') box.append(ownerExpenses());
     if (UI.otab === 'past') box.append(ownerJobs(S.jobs.filter(j => j.date < TODAY).reverse(), true));
     if (UI.otab === 'pay') box.append(ownerPay());
@@ -649,17 +731,24 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   function ownerUpcoming() {
     const up = S.jobs.filter(j => j.date >= TODAY).sort((a, b) => a.date.localeCompare(b.date));
     const week = up.filter(j => j.date <= WEEK_END), later = up.filter(j => j.date > WEEK_END);
-    const bad = week.filter(j => unsettled(j));
-    const cnt = (s) => week.filter(j => jobStatus(j) === s).length;
-    const ban = el('div', 'banner ' + (bad.length ? (cnt('bad') || cnt('none') ? 'badb' : 'warn') : 'good'));
-    if (bad.length) {
-      ban.append(el('div', 'h', '⚠ 1週間以内(' + jaDate(TODAY) + '〜' + jaDate(WEEK_END) + ')に、まだ確定していない清掃が ' + bad.length + '件 あります'));
-      const chips = el('div', 'chips');
-      [['none', '未依頼'], ['bad', '行けない連絡'], ['wait', '返事待ち']].forEach(([s, l]) => { const n = cnt(s); if (n) { const c = el('span', 'chip', l + ' ' + n + '件'); c.style.color = s === 'wait' ? 'var(--wait)' : 'var(--bad)'; chips.append(c); } });
-      ban.append(chips, el('div', 'note', '下のリストで「要確認」の清掃を依頼・再依頼してください。返事待ちが続く場合は、LINEで声をかけてください。'));
+    const follow = up.filter(needsFollow);
+    const waiting = up.filter(j => jobStatus(j) === 'wait').length;
+    const ban = el('div', 'banner ' + (follow.length ? 'badb' : 'good'));
+    if (follow.length) {
+      ban.append(el('div', 'h', '⚠ オーナーのフォローが必要な清掃が ' + follow.length + '件 あります'));
+      const fl = el('div', 'follow');
+      follow.forEach(j => {
+        const row = el('div', 'frow'), ft = el('div', 'ft'), fb = el('div', 'fb');
+        const dl = el('button', 'daylink', jaDate(j.date) + ' ' + j.prop); dl.type = 'button';
+        dl.onclick = () => { UI.modeO = 'cal'; saveMode('O', 'cal'); UI.calO = j.date.slice(0, 7); UI.selO = j.date; render(); };
+        ft.append(dl, el('div', 'note', followReason(j)));
+        fb.append(...followBtns(j)); row.append(ft, fb); fl.append(row);
+      });
+      ban.append(fl);
     } else {
-      ban.append(el('div', 'h', '✓ 1週間以内の清掃は、すべて担当者からOKが出ています'));
+      ban.append(el('div', 'h', '✓ フォローが必要な清掃はありません'));
     }
+    ban.append(el('div', 'note', 'チェックアウトの予定は、メイン担当に自動で送信されます。' + (waiting ? '返事待ちは ' + waiting + '件。' : '') + '1日返事がないと自動で催促し、' + S.rule.replyDays + '日たっても返事がないとき、または清掃日が明日以内のときに、ここに表示されます。'));
     const out = [ban];
     const head = (t1, t2) => { const s = el('div', 'sec-h', t1); s.append(el('small', null, t2)); return s; };
     out.push(head('1週間以内', jaDate(TODAY) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件'), ownerJobs(week, false, true));
@@ -671,13 +760,14 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     const wrap = el('div', 'olist');
     list.forEach(j => {
       const p = prop(j.prop), s = jobStatus(j);
-      const urgent = inWeek && unsettled(j);
+      const follow = !past && needsFollow(j);
+      const urgent = follow || (inWeek && unsettled(j));
       const c = el('article', 'card ojob' + (urgent ? ' urgent' + (s !== 'wait' ? ' bad' : '') : ''));
       const [bc, g, lbl] = STB[s];
       const sb = el('div', 'stblock ' + bc); sb.append(el('div', 'g', g), el('div', 'l', lbl)); c.append(sb);
       const body = el('div', 'body');
       const d = el('div', 'd', jaDate(j.date) + ' ' + j.prop);
-      if (urgent) d.append(el('span', 'tag' + (s === 'wait' ? ' w' : ''), '要確認'));
+      if (follow) d.append(el('span', 'tag', '要フォロー')); else if (urgent) d.append(el('span', 'tag w', '返事待ち'));
       body.append(d);
       const meta = el('div', 'meta');
       const same = j.nextIn === j.date;
@@ -687,15 +777,18 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       meta.append(el('span', 'sample', 'サンプル'));
       body.append(meta);
       const who = el('div', 'who');
-      if (!j.asg.length) who.append(el('span', 'note', '担当者が決まっていません'));
+      if (!j.asg.length) who.append(el('span', 'note', 'メイン担当が決まっていないため、自動送信できていません'));
       j.asg.forEach(a => {
         const map = { wait: ['s-wait', '返事待ち'], ok: ['s-ok', 'OK'], work: ['s-work', '清掃中'], done: ['s-done', '完了'], cant: ['s-bad', '行けない'] };
         const span = el('span'); span.style.display = 'inline-flex'; span.style.gap = '6px'; span.style.alignItems = 'center';
-        span.append(el('span', 'nm', cl(a.c).name), pillEl(...map[a.st]));
-        const tm = el('span', 'tm');
-        if (a.plan) tm.append(document.createTextNode('予定 ' + a.plan));
-        if (a.start) tm.append(document.createTextNode(' / 開始 ' + a.start));
-        if (a.end) tm.append(document.createTextNode(' / 完了 ' + a.end));
+        span.append(el('span', 'nm', cl(a.c).name), isLate(a) ? pillEl('s-bad', '返事なし ' + waitDays(a) + '日') : pillEl(...map[a.st]));
+        const parts = [];
+        if (a.sent && !a.start) parts.push((a.auto ? '自動送信 ' : '送信 ') + md(a.sent) + (a.remind ? '(再送' + a.remind + '回)' : ''));
+        if (nudged(a)) parts.push('自動で催促 ' + md(addDays(a.sent, REMIND_AFTER)));
+        if (a.plan) parts.push('予定 ' + a.plan);
+        if (a.start) parts.push('開始 ' + a.start);
+        if (a.end) parts.push('完了 ' + a.end);
+        const tm = el('span', 'tm', parts.join(' / '));
         const lm = lateMin(a); if (lm > 0) tm.append(document.createTextNode(' '), el('span', 'late', lm + '分遅れ'));
         span.append(tm); who.append(span);
       });
@@ -703,8 +796,8 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       body.append(who); c.append(body);
       const act = el('div', 'act');
       if (!past && s !== 'done') {
-        const b = el('button', 'btn small ' + (s === 'none' || s === 'bad' ? '' : 'ghost'), s === 'none' ? '依頼する' : s === 'bad' ? '再依頼' : '変更');
-        b.type = 'button'; b.onclick = () => openAssign(j); act.append(b);
+        if (follow) act.append(...followBtns(j));
+        else { const b = el('button', 'btn small ghost', '変更'); b.type = 'button'; b.onclick = () => openAssign(j); act.append(b); }
       }
       c.append(act);
       wrap.append(c);
@@ -722,7 +815,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     UI.sheet = () => {
       const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
       const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
-      sh.append(el('h3', null, '清掃を依頼する'), el('div', 'muted', jaDate(j.date) + ' ' + j.prop + '(最大2名)'));
+      sh.append(el('h3', null, needsFollow(j) && j.asg.length ? '代わりの人に依頼する' : '清掃を依頼する'), el('div', 'muted', jaDate(j.date) + ' ' + j.prop + '(最大2名)'));
       const list = el('div', 'picklist');
       const boxes = [];
       const sync = () => boxes.forEach(i => { i.disabled = !i.checked && sel.size >= 2; });
@@ -732,6 +825,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
         cb.onchange = () => { if (cb.checked) sel.add(c.id); else sel.delete(c.id); sync(); go.disabled = !sel.size; };
         lab.append(cb, el('span', null, c.name + '(' + LANG_JA[c.lang] + ')'));
         if (was && was.st === 'cant') lab.append(el('span', 'pill s-bad', '行けない'));
+        if (was && isLate(was)) lab.append(el('span', 'pill s-bad', '返事なし'));
         if (p.main === c.id) lab.append(el('span', 'main', 'メイン担当'));
         if (outside) lab.append(el('span', 'main', '担当に追加'));
         return lab;
@@ -749,14 +843,14 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
           list.append(more);
         }
       }
-      sh.append(list, el('div', 'note', '依頼すると、清掃員の画面に「返事をしてください」と表示されます。本番ではメールやLINEでもお知らせします。'));
+      sh.append(list, el('div', 'note', 'メイン担当には予約が入った時点で自動で送信済みです。ここでは、代わりの人や2人目に手動で依頼できます。チェックを外した人には取り消しのお知らせが届きます(本番ではメールやLINE)。'));
       const r = el('div', 'row');
       const cancel = el('button', 'btn ghost', 'やめる'); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const go = el('button', 'btn', '依頼する'); go.type = 'button'; go.disabled = !sel.size;
       go.onclick = () => {
         sel.forEach(id => { if (!p.members.includes(id)) p.members.push(id); });
         const keep = j.asg.filter(a => sel.has(a.c) && a.st !== 'cant');
-        const added = [...sel].filter(id => !keep.some(a => a.c === id)).map(id => ({ c: id, st: 'wait' }));
+        const added = [...sel].filter(id => !keep.some(a => a.c === id)).map(id => ({ c: id, st: 'wait', sent: TODAY }));
         j.asg = keep.concat(added); UI.sheet = null; render();
       };
       r.append(cancel, go); sh.append(r);
@@ -822,10 +916,25 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   }
 
   function ownerSettings() {
+    const wrap = el('div', 'mgr');
+    const rc = el('div', 'card panel rule');
+    rc.append(el('h2', null, '自動送信とフォローの流れ'));
+    const step = (n, node) => { const r = el('div', 'step'); const d = el('div'); d.append(node); r.append(el('b', null, String(n)), d); return r; };
+    const sel = el('select'); sel.setAttribute('aria-label', '返事を待つ日数');
+    [2, 3].forEach(n => { const o = el('option', null, n + '日'); o.value = String(n); sel.append(o); }); sel.value = String(S.rule.replyDays);
+    sel.onchange = () => { S.rule.replyDays = Number(sel.value); render(); };
+    const s3 = el('span'); s3.append(document.createTextNode('次のどれかに当てはまると、オーナーの画面に「要フォロー」と表示します。①「行けない」の返事が来た ②送信から '), sel, document.createTextNode(' たっても返事がない ③清掃日が今日・明日なのに返事がない(前日に入った予約など。日数を待たずにすぐ表示)。オーナーは「もう一度送る」か「代わりの人に依頼」を選びます。'));
+    rc.append(
+      step(1, document.createTextNode('チェックアウトの予約が入ると、その施設の「メイン担当」に清掃の依頼を自動で送ります。')),
+      step(2, document.createTextNode('清掃員は「OK・時間を選ぶ」または「行けない」で返事をします。')),
+      step(3, document.createTextNode('送信から1日たっても返事がないときは、アプリが自動でもう一度お知らせして、返事を促します。')),
+      step(4, s3),
+      el('div', 'note', '試作品では実際の送信は行いません。本番では、開設できるまではメール、その後は LINE でお知らせします。'));
+    wrap.append(rc);
     const card = el('div', 'card panel');
     card.append(el('h2', null, '施設と担当'));
     const tw = el('div', 'table-wrap'); const tb = el('table');
-    const hr = el('tr'); ['施設', 'OUT〜IN', '清掃料(1回)', '担当する清掃員', 'メイン担当'].forEach(x => hr.append(el('th', null, x)));
+    const hr = el('tr'); ['施設', 'OUT〜IN', '清掃料(1回)', '担当する清掃員', 'メイン担当(自動送信の送り先)'].forEach(x => hr.append(el('th', null, x)));
     const thead = el('thead'); thead.append(hr); const body = el('tbody');
     S.props.forEach(p => {
       const tr = el('tr'); tr.append(el('td', null, p.name));
@@ -850,8 +959,9 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       body.append(tr);
     });
     tb.append(thead, body); tw.append(tb); card.append(tw);
-    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。メイン担当は依頼のときに最初から選ばれます。OUT〜IN・清掃料・担当はサンプルです。'));
-    return card;
+    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。メイン担当は自動送信の送り先です。OUT〜IN・清掃料・担当はサンプルです。'));
+    wrap.append(card);
+    return wrap;
   }
 
   function ownerGuide() {
@@ -912,13 +1022,13 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       '<text x="120" y="306" font-size="10" text-anchor="middle" font-family="sans-serif" fill="#aaa">サンプルのレシート画像</text></svg>';
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
-  const loadMode = (k) => { try { return localStorage.getItem('lz-mode-' + k) || 'list'; } catch (e) { return 'list'; } };
-  const saveMode = (k, v) => { try { localStorage.setItem('lz-mode-' + k, v); } catch (e) {} };
+  const loadMode = (k) => { try { return localStorage.getItem('lz-view-' + k) || 'cal'; } catch (e) { return 'cal'; } };
+  const saveMode = (k, v) => { try { localStorage.setItem('lz-view-' + k, v); } catch (e) {} };
   const CAL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
   const LIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>';
   function viewToggle(key, labels) {
     const box = el('div', 'vtoggle'); box.setAttribute('role', 'group');
-    [['list', LIST_ICON, labels[0]], ['cal', CAL_ICON, labels[1]]].forEach(([v, ic, l]) => {
+    [['cal', CAL_ICON, labels[1]], ['list', LIST_ICON, labels[0]]].forEach(([v, ic, l]) => {
       const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(UI['mode' + key] === v));
       const s = el('span'); s.innerHTML = ic; b.append(s.firstChild, document.createTextNode(l)); // static icon markup
       b.onclick = () => { UI['mode' + key] = v; saveMode(key, v); render(); }; box.append(b);
@@ -968,11 +1078,16 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   const MY_CLS = { wait: 'sb-wait', ok: 'sb-ok', work: 'sb-work', done: 'sb-done', cant: 'sb-bad' };
   function cleanerCalendar() {
     const mine = myJobs(); const me = (j) => j.asg.find(a => a.c === UI.who);
-    const out = [calendar('C', (ds) => mine.filter(j => j.date === ds).map(j => ({ cls: MY_CLS[me(j).st], label: j.prop })), UI.lang, true)];
-    out[0].append(calLegend([['sb-wait', t('wait')], ['sb-ok', t('ok')], ['sb-done', t('done')], ['sb-bad', t('cantSt')]]));
-    const sel = UI.selC; const day = mine.filter(j => j.date === sel);
+    const out = [];
+    // requests waiting for a reply stay on top, whichever day is selected
+    const need = mine.filter(j => me(j).st === 'wait').sort((a, b) => a.date.localeCompare(b.date));
+    if (need.length) out.push(el('div', 'sec-title alert', '● ' + t('need') + ' (' + need.length + ')'), ...need.map(jobCard));
+    const cal = calendar('C', (ds) => mine.filter(j => j.date === ds).map(j => ({ cls: MY_CLS[me(j).st], label: j.prop })), UI.lang, true);
+    cal.append(calLegend([['sb-wait', t('wait')], ['sb-ok', t('ok')], ['sb-done', t('done')], ['sb-bad', t('cantSt')]]));
+    out.push(cal);
+    const sel = UI.selC; const all = mine.filter(j => j.date === sel); const day = all.filter(j => me(j).st !== 'wait');
     out.push(el('div', 'sec-title', dateFmt(sel, UI.lang) + ' ' + wdFmt(sel, UI.lang)));
-    out.push(...(day.length ? day.map(jobCard) : [el('div', 'empty', t('empty'))]));
+    if (day.length) out.push(...day.map(jobCard)); else if (!all.length) out.push(el('div', 'empty', t('empty')));
     return out;
   }
   const expFor = (cid, month, status) => S.expenses.filter(e => e.c === cid && e.date.slice(0, 7) === month && (!status || e.status === status));
@@ -1075,7 +1190,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   function ownerCalendar() {
     const up = S.jobs;
     const cal = calendar('O', (ds) => up.filter(j => j.date === ds).map(j => ({ cls: STB[jobStatus(j)][0], label: j.prop.split(' ')[0] })), 'ja', false);
-    cal.append(calLegend([['sb-none', '未依頼'], ['sb-wait', '返事待ち'], ['sb-bad', '行けない'], ['sb-ok', 'OK'], ['sb-done', '完了']]));
+    cal.append(calLegend([['sb-late', '急ぎ・返事なし・担当なし'], ['sb-bad', '行けない'], ['sb-wait', '返事待ち'], ['sb-ok', 'OK'], ['sb-done', '完了']]));
     const sel = UI.selO; const day = S.jobs.filter(j => j.date === sel);
     const h = el('div', 'sec-h', jaDate(sel) + 'の清掃'); h.append(el('small', null, day.length + '件'));
     return [cal, h, ownerJobs(day, sel < TODAY, sel >= TODAY && sel <= WEEK_END)];
