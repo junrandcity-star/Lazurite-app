@@ -7,7 +7,7 @@
 <title>【試験】Lazurite 運営ボード</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600&display=swap">
-<link rel="stylesheet" href="css/style.css?v=202611141700">
+<link rel="stylesheet" href="css/style.css?v=202611141705">
 </head>
 <body>
 <div class="test-banner" role="note">試験環境(本番のデータには影響しません)</div>
@@ -126,10 +126,12 @@
       <div class="card" id="prop-card">
         <div class="card-head">
           <h2>施設別の比較</h2>
-          <div class="seg" id="period-seg" role="group" aria-label="期間">
-            <button type="button" data-v="cur">今月</button><button type="button" data-v="ytd">今年累計</button>
+          <div class="head-ctl">
+            <div class="seg" id="period-seg" role="group" aria-label="期間">
+              <button type="button" data-v="cur">今月</button><button type="button" data-v="ytd">今年累計</button>
+            </div>
+            <select id="period-month" class="month-pick" aria-label="月を指定"></select>
           </div>
-          <select id="period-month" class="month-pick" aria-label="月を指定"></select>
         </div>
         <p class="period-now" id="period-now"></p>
         <p class="sub">売上は清掃費込み、ADR・RevPARは宿泊料(清掃費除く)で計算。行をタップするとその施設に絞り込みます。</p>
@@ -172,7 +174,7 @@
 
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611141700"></script>
-<script src="js/app.js?v=202611141700"></script>
+<script src="js/config.js?v=202611141705"></script>
+<script src="js/app.js?v=202611141705"></script>
 </body>
 </html>
