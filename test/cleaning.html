@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>【試験】Lazurite 清掃スケジュール</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Noto+Sans+Thai:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/cleaning.css?v=202611151200">
+</head>
+<body>
+<div class="test-banner" role="note">試験環境(本番のデータには影響しません)</div>
+
+<div class="wrap" id="loading">
+  <p class="empty">読み込み中…</p>
+</div>
+
+<!-- ログインしていないとき -->
+<div class="wrap" id="gate" hidden>
+  <div class="card gate">
+    <p id="gate-msg">ログインが必要です。運営ボードでログインしてから、もう一度開いてください。</p>
+    <p><a class="back" href="./">運営ボードを開く</a></p>
+  </div>
+</div>
+
+<div class="wrap" id="wrap" hidden>
+  <div class="proto" id="proto">
+    <a class="back" href="./">← 運営ボード</a>
+    <span class="seg" role="group" aria-label="画面の切り替え">
+      <button type="button" id="v-owner" aria-pressed="true">オーナー画面</button>
+      <button type="button" id="v-cleaner" aria-pressed="false">清掃員の画面</button>
+    </span>
+    <label id="who-wrap" hidden>清掃員:<select id="who"></select></label>
+    <span id="save" role="status"></span>
+    <span>清掃員本人のログインは次の段階で追加します。今は「清掃員の画面」で、清掃員の代わりに操作して確認できます。</span>
+  </div>
+  <main id="app"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="js/config.js?v=202611151200"></script>
+<script src="js/cleaning.js?v=202611151200"></script>
+</body>
+</html>
