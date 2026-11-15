@@ -190,6 +190,16 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .rule .step { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
 .rule .step b { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--surface); display: grid; place-items: center; font-size: .85rem; }
 .rule select { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 4px 8px; }
+.ban-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.ntc { overflow: hidden; }
+.ntc-head { width: 100%; border: 0; background: none; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; cursor: pointer; font-weight: 700; text-align: left; }
+.ntc-head .sp { margin-left: auto; font-weight: 400; }
+.ntc-new { background: var(--bad); color: #fff; border-radius: 999px; font-size: .75rem; padding: 1px 9px; }
+.ntc-body { border-top: 1px solid var(--line); padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ntc-row { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; background: var(--done-soft); border-radius: 4px 14px 14px 14px; padding: 8px 12px; max-width: 560px; }
+.ntc-row.cant { background: var(--bad-soft); }
+.ntc-row .at { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 2px; }
+.ntc-row.fresh .tx { font-weight: 700; }
 .sec-h { font-size: .95rem; font-weight: 700; margin: 6px 2px -2px; display: flex; gap: 8px; align-items: baseline; }
 .sec-h small { font-weight: 400; color: var(--muted); font-size: .8rem; }
 .picklist .sub { font-size: .8rem; color: var(--muted); margin-top: 6px; }
@@ -362,14 +372,21 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       { cid: 'maria', at: '10/04 15:10', who: 'Maria', text: '立替を登録(¥3,300 ニトリ)' },
       { cid: 'maria', at: '10/05 08:30', who: 'オーナー', text: '立替を差し戻し(理由:レシートの金額が読めません。撮り直してください。)' },
     ];
-    return { jobs, props: PROPS.map(p => ({ ...p, members: p.members.slice() })), cleaners: CLEANERS.map(c => ({ ...c })), guide, expenses, confirms: {}, log, rule: { replyDays: 2 } };
+    return { jobs, props: PROPS.map(p => ({ ...p, members: p.members.slice() })), cleaners: CLEANERS.map(c => ({ ...c })), guide, expenses, confirms: {}, log, rule: { replyDays: 2 }, notices: [
+      { at: '10/18 14:00', text: 'Bikash さんが 10/18(日) Laughter の清掃を完了しました(開始 10:30 → 完了 14:00)' },
+      { at: '10/18 13:40', text: 'Maria さんが 10/18(日) Scent of Asia の清掃を完了しました(開始 10:20 → 完了 13:40)' },
+      { at: '10/18 12:30', text: '佐藤 さんが 10/18(日) Yokohama の清掃を完了しました(開始 10:00 → 完了 12:30)' },
+      { at: '10/18 10:30', text: 'Bikash さんが 10/18(日) Laughter の清掃を開始しました' },
+      { at: '10/18 10:20', text: 'Maria さんが 10/18(日) Scent of Asia の清掃を開始しました(予定より20分遅れ)' },
+      { at: '10/18 10:00', text: '佐藤 さんが 10/18(日) Yokohama の清掃を開始しました' },
+    ] };
   }
   // automatic request: goes to the main cleaner of the property
   function autoSend(j, props, date) {
     const p = props.find(x => x.name === j.prop);
     if (p && p.main) j.asg.push({ c: p.main, st: 'wait', sent: date, auto: true });
   }
-  const UI = { view: 'owner', who: 'anan', lang: 'th', ctab: 'jobs', gprop: null, otab: 'jobs', ogprop: 'Stay Silky', sheet: null, flash: null, modeO: 'cal', modeC: 'cal', calO: '2026-10', calC: '2026-10', selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
+  const UI = { view: 'owner', who: 'anan', lang: 'th', ctab: 'jobs', gprop: null, otab: 'jobs', ogprop: 'Stay Silky', sheet: null, flash: null, followOpen: false, noticeOpen: false, modeO: 'cal', modeC: 'cal', calO: '2026-10', calC: '2026-10', selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
 
   // ---------- i18n (cleaner screen) ----------
   const LANGS = [['ja','日本語'],['en','English'],['th','ไทย'],['ne','नेपाली'],['vi','Tiếng Việt']];
@@ -389,6 +406,8 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     vi: { listV:'Danh sách', calV:'Lịch tháng', fee:'Tiền dọn dẹp', reimb:'Hoàn tiền mua đồ', totalPay:'Thanh toán tháng này', expTitle:'Đồ tôi đã mua', addExp:'Đăng ký mua đồ', receipt:'Ảnh hóa đơn', takePhoto:'Chụp hóa đơn', retake:'Chụp lại', pdate:'Ngày mua', amount:'Số tiền đã trả (yên)', store:'Cửa hàng', item:'Món đã mua', forProp:'Dùng cho nhà nào', submit:'Gửi', st_pending:'Đang kiểm tra', st_approved:'Đã duyệt', st_returned:'Bị trả lại', reason:'Lý do', needPhoto:'Vui lòng thêm ảnh hóa đơn và số tiền.', confirmBtn:'Tôi đã kiểm tra bảng kê', confirmedAt:'Đã kiểm tra', noExp:'Chưa có', resend:'Sửa và gửi lại', feeList:'Chi tiết tiền dọn dẹp' },
   };
   Object.keys(T2).forEach(k => Object.assign(T[k], T2[k]));
+  const T3 = { ja: 'オーナーに通知しました', en: 'The owner has been notified', th: 'แจ้งเจ้าของแล้ว', ne: 'मालिकलाई जानकारी पठाइयो', vi: 'Đã báo cho chủ nhà' };
+  Object.keys(T3).forEach(k => { T[k].notified = T3[k]; });
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
 
   // guide: same 5 areas for each property (sample notes)
@@ -557,14 +576,14 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     }
     if (a.st === 'ok') {
       const b = el('button', 'btn big-start', t('start')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
-      b.onclick = () => { a.start = nowHM(); a.st = 'work'; render(); };
+      b.onclick = () => { a.start = nowHM(); a.st = 'work'; const lm = lateMin(a); notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を開始しました' + (lm > 0 ? '(予定より' + lm + '分遅れ)' : '')); render(); };
       c.append(b);
       if (t('protoNote')) c.append(el('div', 'log', t('protoNote')));
     }
     if (a.st === 'work') {
       c.append(logLine(a));
       const b = el('button', 'btn big-ok', t('finish')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
-      b.onclick = () => { a.end = nowHM(); a.st = 'done'; render(); };
+      b.onclick = () => { a.end = nowHM(); a.st = 'done'; notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を完了しました(開始 ' + a.start + ' → 完了 ' + a.end + ')'); render(); };
       c.append(b);
     }
     if (a.st === 'done') c.append(logLine(a));
@@ -574,6 +593,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     const l = el('div', 'log');
     l.append(document.createTextNode(t('started') + ' ' + a.start + (a.end ? ' → ' + t('ended') + ' ' + a.end : '')));
     const lm = lateMin(a); if (lm > 0) { l.append(document.createTextNode('  ')); l.append(el('span', 'late', '(' + lm + t('late') + ')')); }
+    const nt = el('div', null, '✓ ' + t('notified')); nt.style.color = 'var(--done)'; l.append(nt);
     return l;
   }
 
@@ -596,7 +616,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       const row = el('div', 'row');
       const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const ok = el('button', 'btn big-ok', t('confirm')); ok.type = 'button'; ok.disabled = !chosen;
-      ok.onclick = () => { a.plan = chosen; a.st = 'ok'; UI.sheet = null; render(); };
+      ok.onclick = () => { a.plan = chosen; a.st = 'ok'; notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' にOKの返事をしました(' + chosen + ' から入る予定)'); UI.sheet = null; render(); };
       row.append(cancel, ok); sh.append(row);
       bg.append(sh); return bg;
     };
@@ -611,7 +631,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       const row = el('div', 'row');
       const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const yes = el('button', 'btn', t('yes')); yes.type = 'button'; yes.style.background = 'var(--bad)'; yes.style.borderColor = 'var(--bad)';
-      yes.onclick = () => { a.st = 'cant'; delete a.plan; UI.sheet = null; render(); };
+      yes.onclick = () => { a.st = 'cant'; delete a.plan; notify(cl(UI.who).name + ' さんから ' + jaDate(j.date) + ' ' + j.prop + ' に「行けない」と返事がありました', 'cant'); UI.sheet = null; render(); };
       row.append(cancel, yes); sh.append(row); bg.append(sh); return bg;
     };
     render();
@@ -716,7 +736,7 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       }
       box.append(viewToggle('O', ['リスト', 'カレンダー']));
       const up = ownerUpcoming();
-      box.append(...(UI.modeO === 'cal' ? [up[0], ...ownerCalendar()] : up));
+      box.append(up[0], noticePanel(), ...(UI.modeO === 'cal' ? ownerCalendar() : up.slice(1)));
       box.append(simNewBooking());
     }
     if (UI.otab === 'exp') box.append(ownerExpenses());
@@ -735,7 +755,10 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
     const waiting = up.filter(j => jobStatus(j) === 'wait').length;
     const ban = el('div', 'banner ' + (follow.length ? 'badb' : 'good'));
     if (follow.length) {
-      ban.append(el('div', 'h', '⚠ オーナーのフォローが必要な清掃が ' + follow.length + '件 あります'));
+      const hd = el('div', 'ban-head');
+      const tg = el('button', 'btn small', UI.followOpen ? '閉じる ▲' : '詳細を見る ▼'); tg.type = 'button'; tg.setAttribute('aria-expanded', String(UI.followOpen));
+      tg.onclick = () => { UI.followOpen = !UI.followOpen; render(); };
+      hd.append(el('div', 'h', '⚠ オーナーのフォローが必要な清掃が ' + follow.length + '件 あります'), tg); ban.append(hd);
       const fl = el('div', 'follow');
       follow.forEach(j => {
         const row = el('div', 'frow'), ft = el('div', 'ft'), fb = el('div', 'fb');
@@ -744,11 +767,11 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
         ft.append(dl, el('div', 'note', followReason(j)));
         fb.append(...followBtns(j)); row.append(ft, fb); fl.append(row);
       });
-      ban.append(fl);
+      if (UI.followOpen) ban.append(fl);
     } else {
       ban.append(el('div', 'h', '✓ フォローが必要な清掃はありません'));
     }
-    ban.append(el('div', 'note', 'チェックアウトの予定は、メイン担当に自動で送信されます。' + (waiting ? '返事待ちは ' + waiting + '件。' : '') + '1日返事がないと自動で催促し、' + S.rule.replyDays + '日たっても返事がないとき、または清掃日が明日以内のときに、ここに表示されます。'));
+    if (!follow.length || UI.followOpen) ban.append(el('div', 'note', 'チェックアウトの予定は、メイン担当に自動で送信されます。' + (waiting ? '返事待ちは ' + waiting + '件。' : '') + '1日返事がないと自動で催促し、' + S.rule.replyDays + '日たっても返事がないとき、または清掃日が明日以内のときに、ここに表示されます。'));
     const out = [ban];
     const head = (t1, t2) => { const s = el('div', 'sec-h', t1); s.append(el('small', null, t2)); return s; };
     out.push(head('1週間以内', jaDate(TODAY) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件'), ownerJobs(week, false, true));
@@ -929,6 +952,8 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
       step(2, document.createTextNode('清掃員は「OK・時間を選ぶ」または「行けない」で返事をします。')),
       step(3, document.createTextNode('送信から1日たっても返事がないときは、アプリが自動でもう一度お知らせして、返事を促します。')),
       step(4, s3),
+      step(5, document.createTextNode('清掃の当日、清掃員が「清掃を始める」「清掃が終わった」を押すと、時刻が記録され、オーナーに通知が届きます(LINE を予定)。')),
+      step(6, document.createTextNode('【将来の予定】「清掃が終わった」が押されたら、次のゲストに「清掃が終わったので入室できます」というメールを自動で送ります。Beds24 側のメール設定ができてから対応します。')),
       el('div', 'note', '試作品では実際の送信は行いません。本番では、開設できるまではメール、その後は LINE でお知らせします。'));
     wrap.append(rc);
     const card = el('div', 'card panel');
@@ -1007,6 +1032,23 @@ td .checks { flex-wrap: wrap; max-width: 340px; }
   // ---------- shared: log, receipt sample, view mode ----------
   const stamp = () => { const d = new Date(); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const addLog = (cid, who, text) => S.log.push({ cid, at: stamp(), who, text });
+  // message the owner would receive (LINE in production)
+  const notify = (text, kind) => S.notices.unshift({ at: stamp(), text, kind, fresh: true });
+  function noticePanel() {
+    const fresh = S.notices.filter(n => n.fresh).length;
+    const box = el('div', 'card ntc');
+    const head = el('button', 'ntc-head'); head.type = 'button'; head.setAttribute('aria-expanded', String(UI.noticeOpen));
+    head.append(el('span', null, '🔔 清掃員からの通知'), fresh ? el('span', 'ntc-new', '新着 ' + fresh + '件') : el('span', 'note', S.notices.length + '件'), el('span', 'note sp', UI.noticeOpen ? '閉じる ▲' : '開く ▼'));
+    head.onclick = () => { if (UI.noticeOpen) S.notices.forEach(n => { n.fresh = false; }); UI.noticeOpen = !UI.noticeOpen; render(); };
+    box.append(head);
+    if (UI.noticeOpen) {
+      const body = el('div', 'ntc-body');
+      body.append(el('div', 'note', '清掃員が「OK」「行けない」「清掃を始める」「清掃が終わった」を押すと、オーナーの LINE に下の文面が届きます(試作品では送信しません。LINE 開設まではメール)。'));
+      S.notices.slice(0, 20).forEach(n => { const r = el('div', 'ntc-row' + (n.kind === 'cant' ? ' cant' : '') + (n.fresh ? ' fresh' : '')); r.append(el('span', 'at', n.at), el('span', 'tx', n.text)); body.append(r); });
+      box.append(body);
+    }
+    return box;
+  }
   function receiptSVG(store, item, amount, date) {
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="320" viewBox="0 0 240 320"><rect width="240" height="320" fill="#fbfaf6"/>' +
