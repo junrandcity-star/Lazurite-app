@@ -88,7 +88,7 @@
 
 ### 2026-11-18 夜 追加修正(試験環境)
 - 右上に運営ボードと同じアプリ一覧ボタンを配置(`test/cleaning.html` のヘッダー)。運営ボードは `./#todo` で予約メモ・Todo タブを開けるようにした(`test/js/app.js`)。
-- オーナー画面のメニューを「清掃/お金/設定」の3区分に整理。
+- オーナー画面のメニューを「清掃/お金/設定」のタブに整理(選んだタブの項目だけを下に表示。タブごとに最後に開いた項目を覚える)。
 - 「オーナーのフォローが必要な清掃」を「清掃員からの通知」と同じ見た目に統一(見出しの大きさ・件数の丸印・「開く ▼」)。
 - ガイドの自動翻訳(No.9)を実装:
   - Edge Function `translate`(試験用 Lazurite Test に配置。ソースは `supabase/functions/translate/index.ts`)。Google Cloud Translation(v2)で ja → en/th/ne/vi。ログインした人のみ(関数内で Supabase Auth に本人確認。そのため verify_jwt は false)。キーは Secrets の `GOOGLE_TRANSLATE_KEY`。

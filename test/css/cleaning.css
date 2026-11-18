@@ -347,14 +347,13 @@ td .members { font-weight: 500; margin-bottom: 2px; }
   .app-s { font-size: .7rem; }
 }
 
-/* ---- grouped owner menu ---- */
-.omenu { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 12px; display: flex; flex-direction: column; }
-.omenu .og { display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: center; padding: 6px 0; }
-.omenu .og + .og { border-top: 1px solid var(--line); }
-.omenu .og-l { font-size: .78rem; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
-@media (max-width: 520px) {
-  .omenu .og { grid-template-columns: 1fr; gap: 4px; }
-}
+/* ---- owner menu: group tabs + items ---- */
+.omenu { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.og-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.og-tabs button { flex: 1 1 0; border: 0; background: none; padding: 10px 6px 9px; font: inherit; font-weight: 700; font-size: .92rem; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+.og-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.og-tabs .tbadge { margin-left: 4px; }
+.omenu .otabs { padding: 10px 12px; }
 
 /* ---- follow card (same look as the notice panel) ---- */
 .ntc.alert { border-left: 4px solid var(--bad); }

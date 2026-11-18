@@ -573,16 +573,27 @@
       ['お金', [['exp', '立替精算'], ['pay', '支払い・明細書']]],
       ['設定', [['cleaners', '清掃員'], ['settings', '施設と担当'], ['guide', 'ガイドの登録']]],
     ];
+    // top tabs: 清掃 / お金 / 設定 ; under them, the items of the chosen one
+    const cur = GROUPS.find(([, items]) => items.some(([k]) => k === UI.otab)) || GROUPS[0];
+    const pendExp = S.expenses.filter(e => e.status === 'pending').length;
+    const gt = el('div', 'og-tabs'); gt.setAttribute('role', 'tablist');
     GROUPS.forEach(([gl, items]) => {
-      const g = el('div', 'og'); const tabs = el('div', 'otabs');
-      g.append(el('span', 'og-l', gl), tabs); menu.append(g);
-      items.forEach(([k, l]) => {
-      const b = el('button', null, l); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.otab === k)); b.onclick = () => { UI.otab = k; UI.stmt = null; render(); };
-      if (k === 'exp') { const n = S.expenses.filter(e => e.status === 'pending').length; if (n) b.append(document.createTextNode(' (' + n + ')')); }
+      const on = cur[0] === gl;
+      const b = el('button', null, gl); b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(on));
+      b.onclick = () => { if (!on) { UI.otab = (UI.lastTab && UI.lastTab[gl]) || items[0][0]; UI.stmt = null; render(); } };
+      if (gl === '清掃' && todayLeft) b.append(el('span', 'tbadge', String(todayLeft)));
+      if (gl === 'お金' && pendExp) b.append(el('span', 'tbadge', String(pendExp)));
+      gt.append(b);
+    });
+    const tabs = el('div', 'otabs');
+    cur[1].forEach(([k, l]) => {
+      const b = el('button', null, l); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.otab === k));
+      b.onclick = () => { UI.otab = k; UI.stmt = null; UI.lastTab = Object.assign(UI.lastTab || {}, { [cur[0]]: k }); render(); };
+      if (k === 'exp' && pendExp) b.append(document.createTextNode(' (' + pendExp + ')'));
       if (k === 'today' && todayList.length) { b.classList.add('has-today'); b.append(el('span', 'tbadge' + (todayLeft ? '' : ' fin'), todayLeft ? 'あと' + todayLeft + '件' : '完了')); }
       tabs.append(b);
-      });
     });
+    menu.append(gt, tabs);
     box.append(menu);
     if (UI.otab === 'jobs') {
       if (UI.flash) {
