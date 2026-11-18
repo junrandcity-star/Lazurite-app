@@ -233,7 +233,7 @@
   const T4 = { ja: '清掃の当日に押せます', en: 'You can press this on the cleaning day', th: 'กดได้ในวันทำความสะอาด', ne: 'सरसफाइको दिन थिच्न सकिन्छ', vi: 'Bấm được vào ngày dọn dẹp' };
   Object.keys(T4).forEach(k => { T[k].onDay = T4[k]; });
   const T5 = {
-    ja: { today:'本日の清掃', todayEmpty:'今日の清掃はありません', payTotal:'お支払い', pickMonth:'月を選ぶ', confirmLater:'この月の明細は、翌月1日から確認できます', confirmAsk:'の明細を確認してください', openIt:'開く' },
+    ja: { today:'本日', todayEmpty:'今日の清掃はありません', payTotal:'お支払い', pickMonth:'月を選ぶ', confirmLater:'この月の明細は、翌月1日から確認できます', confirmAsk:'の明細を確認してください', openIt:'開く' },
     en: { today:'Today', todayEmpty:'No cleaning today', payTotal:'Payment', pickMonth:'Month', confirmLater:"You can confirm this month's statement from the 1st of next month.", confirmAsk:': please check your statement', openIt:'Open' },
     th: { today:'งานวันนี้', todayEmpty:'วันนี้ไม่มีงานทำความสะอาด', payTotal:'ยอดจ่าย', pickMonth:'เลือกเดือน', confirmLater:'ตรวจสอบรายละเอียดของเดือนนี้ได้ตั้งแต่วันที่ 1 ของเดือนถัดไป', confirmAsk:': กรุณาตรวจสอบรายละเอียด', openIt:'เปิด' },
     ne: { today:'आजको काम', todayEmpty:'आज कुनै सरसफाइ छैन', payTotal:'भुक्तानी', pickMonth:'महिना छान्नुहोस्', confirmLater:'यो महिनाको विवरण अर्को महिनाको १ गतेदेखि जाँच्न सकिन्छ।', confirmAsk:': कृपया विवरण जाँच गर्नुहोस्', openIt:'खोल्नुहोस्' },
@@ -569,7 +569,7 @@
     const todayList = S.jobs.filter(j => j.date === TODAY);
     const todayLeft = todayList.filter(j => jobStatus(j) !== 'done').length;
     const GROUPS = [
-      ['清掃', [['today', '本日の清掃'], ['jobs', '今後の清掃'], ['past', '終わった清掃']]],
+      ['清掃', [['today', '本日'], ['jobs', '予定'], ['past', '過去']]],
       ['お金', [['exp', '立替精算'], ['pay', '支払い・明細書']]],
       ['設定', [['cleaners', '清掃員'], ['settings', '施設と担当'], ['guide', 'ガイドの登録']]],
     ];
@@ -669,7 +669,7 @@
     top.append(ban);
     const out = [top];
     const head = (t1, t2) => { const s = el('div', 'sec-h', t1); s.append(el('small', null, t2)); return s; };
-    out.push(head('1週間以内', jaDate(addDays(TODAY, 1)) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件(今日の清掃は「本日の清掃」タブ)'), ownerJobs(week, false, true));
+    out.push(head('1週間以内', jaDate(addDays(TODAY, 1)) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件(今日の清掃は「本日」)'), ownerJobs(week, false, true));
     out.push(head('それ以降', later.length + '件' + (later.length > 40 ? '(近い順に40件を表示。それより先はカレンダーで確認できます)' : '')), ownerJobs(later.slice(0, 40), false, false));
     return out;
   }
