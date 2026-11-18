@@ -299,3 +299,19 @@ body { margin: 0; }
 #save.err { color: var(--bad); }
 .gate { max-width: 440px; margin: 40px auto; padding: 20px; text-align: center; }
 
+
+/* ---- 2026-11-18 backlog ---- */
+.ctabs { grid-template-columns: repeat(4, 1fr); }
+.ctabs button { font-size: .8rem; }
+.ctabs button.has-today:not([aria-pressed="true"]) { border-color: var(--bad); color: var(--bad); }
+.ctabs .badge.now { background: var(--bad); }
+.otabs button.has-today:not([aria-pressed="true"]) { border-color: var(--bad); color: var(--bad); font-weight: 700; }
+.tbadge { margin-left: 6px; background: var(--bad); color: #fff; border-radius: 999px; font-size: .72rem; padding: 1px 7px; font-weight: 700; }
+.tbadge.fin { background: var(--done); }
+.otabs button[aria-pressed="true"] .tbadge { background: #fff; color: var(--bad); }
+.otabs button[aria-pressed="true"] .tbadge.fin { color: var(--done); }
+.checks label.all { font-weight: 700; flex-basis: 100%; }
+.mgr-row .top .nm-in { font-weight: 700; flex: 1 1 140px; min-width: 0; max-width: 260px; }
+td .members { font-weight: 500; margin-bottom: 2px; }
+.rule .ban-head h2 { margin: 0; }
+.month-pick { max-width: 240px; }

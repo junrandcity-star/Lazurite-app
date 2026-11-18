@@ -15,7 +15,10 @@
   const plusDays = (s0, n) => { const d = new Date(s0 + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const TODAY = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // Japan time
   const WEEK_END = plusDays(TODAY, 7);
-  const FROM = plusDays(TODAY.slice(0, 7) + '-01', -1).slice(0, 7) + '-01'; // first day of last month
+  const monthsBack = (m, n) => { let y = +m.slice(0, 4), mo = +m.slice(5, 7) - n; while (mo < 1) { mo += 12; y--; } return y + '-' + String(mo).padStart(2, '0'); };
+  const THIS_MONTH = TODAY.slice(0, 7);
+  const PAY_MONTHS = [0, 1, 2, 3, 4, 5, 6].map(n => monthsBack(THIS_MONTH, n)); // this month and the 6 before it
+  const FROM = PAY_MONTHS[PAY_MONTHS.length - 1] + '-01';
   const LANG_JA = { ja: '日本語', en: '英語', th: 'タイ語', ne: 'ネパール語', vi: 'ベトナム語' };
 
   // ---------- load everything from the database ----------
@@ -158,7 +161,7 @@
     } catch (e) { console.error(e); setSave('error'); return null; }
   }
 
-  const UI = { view: 'owner', who: null, lang: 'ja', ctab: 'jobs', gprop: null, otab: 'jobs', ogprop: null, delC: null, sheet: null, flash: null, followOpen: false, noticeOpen: false, modeO: 'cal', modeC: 'cal', calO: TODAY.slice(0, 7), calC: TODAY.slice(0, 7), selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
+  const UI = { view: 'owner', who: null, lang: 'ja', ctab: 'jobs', gprop: null, otab: 'jobs', flowOpen: false, editMembers: null, payM: THIS_MONTH, payMO: THIS_MONTH, ogprop: null, delC: null, sheet: null, flash: null, followOpen: false, noticeOpen: false, modeO: 'cal', modeC: 'cal', calO: TODAY.slice(0, 7), calC: TODAY.slice(0, 7), selO: TODAY, selC: TODAY, stmt: null, expFilter: 'pending' };
 
   // ---------- i18n (cleaner screen) ----------
   const LANGS = [['ja','日本語'],['en','English'],['th','ไทย'],['ne','नेपाली'],['vi','Tiếng Việt']];
@@ -182,7 +185,16 @@
   Object.keys(T3).forEach(k => { T[k].notified = T3[k]; });
   const T4 = { ja: '清掃の当日に押せます', en: 'You can press this on the cleaning day', th: 'กดได้ในวันทำความสะอาด', ne: 'सरसफाइको दिन थिच्न सकिन्छ', vi: 'Bấm được vào ngày dọn dẹp' };
   Object.keys(T4).forEach(k => { T[k].onDay = T4[k]; });
+  const T5 = {
+    ja: { today:'本日の清掃', todayEmpty:'今日の清掃はありません', payTotal:'お支払い', pickMonth:'月を選ぶ', confirmLater:'この月の明細は、翌月1日から確認できます', confirmAsk:'の明細を確認してください', openIt:'開く' },
+    en: { today:'Today', todayEmpty:'No cleaning today', payTotal:'Payment', pickMonth:'Month', confirmLater:"You can confirm this month's statement from the 1st of next month.", confirmAsk:': please check your statement', openIt:'Open' },
+    th: { today:'งานวันนี้', todayEmpty:'วันนี้ไม่มีงานทำความสะอาด', payTotal:'ยอดจ่าย', pickMonth:'เลือกเดือน', confirmLater:'ตรวจสอบรายละเอียดของเดือนนี้ได้ตั้งแต่วันที่ 1 ของเดือนถัดไป', confirmAsk:': กรุณาตรวจสอบรายละเอียด', openIt:'เปิด' },
+    ne: { today:'आजको काम', todayEmpty:'आज कुनै सरसफाइ छैन', payTotal:'भुक्तानी', pickMonth:'महिना छान्नुहोस्', confirmLater:'यो महिनाको विवरण अर्को महिनाको १ गतेदेखि जाँच्न सकिन्छ।', confirmAsk:': कृपया विवरण जाँच गर्नुहोस्', openIt:'खोल्नुहोस्' },
+    vi: { today:'Hôm nay', todayEmpty:'Hôm nay không có lịch dọn', payTotal:'Thanh toán', pickMonth:'Chọn tháng', confirmLater:'Bạn có thể xác nhận bảng kê tháng này từ ngày 1 tháng sau.', confirmAsk:': vui lòng kiểm tra bảng kê', openIt:'Mở' },
+  };
+  Object.keys(T5).forEach(k => Object.assign(T[k], T5[k]));
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
+  const monthName = (m, lang) => { try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { year: 'numeric', month: 'long', calendar: 'gregory' }).format(new Date(m + '-15T00:00:00')); } catch (e) { return m; } };
 
   // guide: same 5 areas for each property (sample notes)
   const AREAS = [
@@ -247,6 +259,7 @@
     cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
     book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M8 7h7"/></svg>',
     yen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l6 8 6-8"/><path d="M12 11v10M7 13h10M7 17h10"/></svg>',
+    today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
   };
   const icon = (k) => { const s = el('span'); s.innerHTML = ICON[k]; return s.firstChild; }; // static markup only
@@ -254,9 +267,11 @@
   // ---------- top controls ----------
   const whoSel = $('who');
   function fillWho() { whoSel.replaceChildren(...S.cleaners.map(c => { const o = el('option', null, c.name + '(' + LANG_JA[c.lang] + ')'); o.value = c.id; return o; })); whoSel.value = UI.who; }
-  whoSel.onchange = () => { UI.who = whoSel.value; UI.lang = cl(UI.who).lang; render(); };
+  // open the "today" tab first when the cleaner has a job today
+  const cleanerStartTab = () => { UI.ctab = cl(UI.who) && myToday().length ? 'today' : 'jobs'; UI.payM = THIS_MONTH; };
+  whoSel.onchange = () => { UI.who = whoSel.value; UI.lang = cl(UI.who).lang; cleanerStartTab(); render(); };
   $('v-owner').onclick = () => { UI.view = 'owner'; render(); };
-  $('v-cleaner').onclick = () => { UI.view = 'cleaner'; if (cl(UI.who)) UI.lang = cl(UI.who).lang; render(); };
+  $('v-cleaner').onclick = () => { UI.view = 'cleaner'; if (cl(UI.who)) UI.lang = cl(UI.who).lang; cleanerStartTab(); render(); };
 
   function render() {
     if (!cl(UI.who)) { UI.who = S.cleaners[0] ? S.cleaners[0].id : null; if (cl(UI.who) && UI.view === 'cleaner') UI.lang = cl(UI.who).lang; }
@@ -276,6 +291,10 @@
   // CLEANER VIEW
   // ============================================================
   function myJobs() { return S.jobs.filter(j => j.asg.some(a => a.c === UI.who)); }
+  // today's jobs of this cleaner, except the ones they said they cannot do
+  function myToday() { return myJobs().filter(j => j.date === TODAY && j.asg.find(a => a.c === UI.who).st !== 'cant'); }
+  // finished months (with something to pay) that the cleaner has not confirmed yet
+  function toConfirm(cid) { return PAY_MONTHS.filter(m => m < THIS_MONTH && !S.confirms[cid + '|' + m] && monthTotal(cid, m) > 0); }
   function cleanerView() {
     const box = el('div', 'phone');
     if (!cl(UI.who)) { box.append(el('div', 'empty', '「清掃員」タブで清掃員を登録すると、清掃員の画面を確認できます。')); return box; }
@@ -287,24 +306,38 @@
     box.append(langs);
 
     const waitN = myJobs().filter(j => j.asg.find(a => a.c === UI.who).st === 'wait').length;
+    const todayN = myToday().filter(j => j.asg.find(a => a.c === UI.who).st !== 'done').length;
+    const confN = toConfirm(UI.who).length;
     const tabs = el('div', 'ctabs');
-    [['jobs', 'cal'], ['guide', 'book'], ['pay', 'yen']].forEach(([k, ic]) => {
+    [['today', 'today'], ['jobs', 'cal'], ['guide', 'book'], ['pay', 'yen']].forEach(([k, ic]) => {
       const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.ctab === k));
-      const d = el('span', 'dot'); d.append(icon(ic)); if (k === 'jobs' && waitN) d.append(el('span', 'badge', String(waitN)));
+      if (k === 'today' && todayN) b.classList.add('has-today');
+      const d = el('span', 'dot'); d.append(icon(ic));
+      if (k === 'today' && todayN) d.append(el('span', 'badge now', String(todayN)));
+      if (k === 'jobs' && waitN) d.append(el('span', 'badge', String(waitN)));
+      if (k === 'pay' && confN) d.append(el('span', 'badge now', '!'));
       b.append(d, el('span', null, t(k))); b.onclick = () => { UI.ctab = k; render(); }; tabs.append(b);
     });
     box.append(tabs);
+    if (UI.ctab === 'today') box.append(...cleanerToday());
     if (UI.ctab === 'jobs') { box.append(viewToggle('C', [t('listV'), t('calV')])); box.append(...(UI.modeC === 'cal' ? cleanerCalendar() : cleanerJobs())); }
     if (UI.ctab === 'guide') box.append(...cleanerGuide());
     if (UI.ctab === 'pay') box.append(...cleanerPay());
     return box;
   }
 
+  function cleanerToday() {
+    const list = myToday().sort((a, b) => a.prop.localeCompare(b.prop));
+    const out = [el('div', 'sec-title', t('today') + ' · ' + dateFmt(TODAY, UI.lang) + ' ' + wdFmt(TODAY, UI.lang))];
+    out.push(...(list.length ? list.map(jobCard) : [el('div', 'empty', t('todayEmpty'))]));
+    return out;
+  }
+
   function cleanerJobs() {
     const mine = myJobs();
     const me = (j) => j.asg.find(a => a.c === UI.who);
     const need = mine.filter(j => me(j).st === 'wait');
-    const up = mine.filter(j => ['ok', 'work', 'cant'].includes(me(j).st)).sort((a, b) => a.date.localeCompare(b.date));
+    const up = mine.filter(j => j.date > TODAY && ['ok', 'work', 'cant'].includes(me(j).st)).sort((a, b) => a.date.localeCompare(b.date));
     const fin = mine.filter(j => me(j).st === 'done').sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     const out = [];
     if (need.length) { const s = el('div', 'sec-title alert', '● ' + t('need') + ' (' + need.length + ')'); out.push(s, ...need.map(jobCard)); }
@@ -486,9 +519,12 @@
     const h = el('div'); h.append(el('h1', null, '清掃スケジュール'), el('div', 'note', '今日:' + jaDate(TODAY)));
     box.append(h);
     const tabs = el('div', 'otabs');
-    [['jobs', '今後の清掃'], ['past', '終わった清掃'], ['exp', '立替精算'], ['pay', '支払い・明細書'], ['cleaners', '清掃員'], ['settings', '施設と担当'], ['guide', 'ガイドの登録']].forEach(([k, l]) => {
+    const todayList = S.jobs.filter(j => j.date === TODAY);
+    const todayLeft = todayList.filter(j => jobStatus(j) !== 'done').length;
+    [['today', '本日の清掃'], ['jobs', '今後の清掃'], ['past', '終わった清掃'], ['exp', '立替精算'], ['pay', '支払い・明細書'], ['cleaners', '清掃員'], ['settings', '施設と担当'], ['guide', 'ガイドの登録']].forEach(([k, l]) => {
       const b = el('button', null, l); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.otab === k)); b.onclick = () => { UI.otab = k; UI.stmt = null; render(); };
       if (k === 'exp') { const n = S.expenses.filter(e => e.status === 'pending').length; if (n) b.append(document.createTextNode(' (' + n + ')')); }
+      if (k === 'today' && todayList.length) { b.classList.add('has-today'); b.append(el('span', 'tbadge' + (todayLeft ? '' : ' fin'), todayLeft ? 'あと' + todayLeft + '件' : '完了')); }
       tabs.append(b);
     });
     box.append(tabs);
@@ -501,6 +537,7 @@
       const up = ownerUpcoming();
       box.append(up[0], noticePanel(), ...(UI.modeO === 'cal' ? ownerCalendar() : up.slice(1)));
     }
+    if (UI.otab === 'today') box.append(...ownerToday(todayList));
     if (UI.otab === 'exp') box.append(ownerExpenses());
     if (UI.otab === 'past') box.append(ownerJobs(S.jobs.filter(j => j.date < TODAY).reverse().slice(0, 60), true));
     if (UI.otab === 'pay') box.append(ownerPay());
@@ -510,9 +547,27 @@
     return box;
   }
 
+  function ownerToday(list) {
+    const out = [];
+    const cnt = (f) => list.filter(f).length;
+    const done = cnt(j => jobStatus(j) === 'done'), work = cnt(j => jobStatus(j) === 'work');
+    const follow = cnt(j => needsFollow(j)), ready = list.length - done - work - follow;
+    const ban = el('div', 'banner ' + (!list.length ? 'good' : follow ? 'badb' : done === list.length ? 'good' : 'warn'));
+    if (!list.length) ban.append(el('div', 'h', '今日(' + jaDate(TODAY) + ')の清掃はありません'));
+    else {
+      ban.append(el('div', 'h', '今日(' + jaDate(TODAY) + ')の清掃 ' + list.length + '件'));
+      const chips = el('div', 'chips');
+      [['完了', done, 'var(--done)'], ['清掃中', work, 'var(--work)'], ['これから', ready, 'var(--ok)'], ['要フォロー', follow, 'var(--bad)']].forEach(([l, n, c]) => { if (n) { const ch = el('span', 'chip', l + ' ' + n + '件'); ch.style.color = c; chips.append(ch); } });
+      ban.append(chips);
+    }
+    out.push(ban, noticePanel());
+    if (list.length) out.push(ownerJobs(list.slice().sort((a, b) => a.prop.localeCompare(b.prop)), false, true));
+    return out;
+  }
+
   function ownerUpcoming() {
     const up = S.jobs.filter(j => j.date >= TODAY).sort((a, b) => a.date.localeCompare(b.date));
-    const week = up.filter(j => j.date <= WEEK_END), later = up.filter(j => j.date > WEEK_END);
+    const week = up.filter(j => j.date > TODAY && j.date <= WEEK_END), later = up.filter(j => j.date > WEEK_END);
     const follow = up.filter(needsFollow);
     const waiting = up.filter(j => jobStatus(j) === 'wait').length;
     const ban = el('div', 'banner ' + (follow.length ? 'badb' : 'good'));
@@ -545,7 +600,7 @@
     top.append(ban);
     const out = [top];
     const head = (t1, t2) => { const s = el('div', 'sec-h', t1); s.append(el('small', null, t2)); return s; };
-    out.push(head('1週間以内', jaDate(TODAY) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件'), ownerJobs(week, false, true));
+    out.push(head('1週間以内', jaDate(addDays(TODAY, 1)) + '〜' + jaDate(WEEK_END) + '・' + week.length + '件(今日の清掃は「本日の清掃」タブ)'), ownerJobs(week, false, true));
     out.push(head('それ以降', later.length + '件' + (later.length > 40 ? '(近い順に40件を表示。それより先はカレンダーで確認できます)' : '')), ownerJobs(later.slice(0, 40), false, false));
     return out;
   }
@@ -654,20 +709,29 @@
 
   function propChecks(selected, onToggle) {
     const box = el('div', 'checks');
-    S.props.forEach(p => {
+    const allLab = el('label', 'all'); const all = el('input'); all.type = 'checkbox';
+    allLab.append(all, document.createTextNode('すべての施設')); box.append(allLab);
+    const boxes = S.props.map(p => {
       const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = selected(p);
-      cb.onchange = () => onToggle(p, cb.checked);
+      cb.onchange = () => { onToggle(p, cb.checked); syncAll(); };
       lab.append(cb, document.createTextNode(p.name)); box.append(lab);
+      return [p, cb];
     });
+    const syncAll = () => { const n = boxes.filter(([, cb]) => cb.checked).length; all.checked = n === boxes.length && n > 0; all.indeterminate = n > 0 && n < boxes.length; };
+    all.onchange = () => { boxes.forEach(([p, cb]) => { if (cb.checked !== all.checked) { cb.checked = all.checked; onToggle(p, all.checked); } }); syncAll(); };
+    syncAll();
     return box;
   }
 
   function ownerCleaners() {
     const wrap = el('div', 'mgr');
-    wrap.append(el('div', 'note', '清掃員ごとに、表示する言語・連絡方法・担当する施設を設定します。清掃員の画面には、担当施設の清掃とガイドだけが表示されます。'));
+    wrap.append(el('div', 'note', '清掃員ごとに、名前・表示する言語・連絡方法・担当する施設を設定します。名前は欄を直すと変わります(これまでの記録はそのまま残ります)。清掃員の画面には、担当施設の清掃とガイドだけが表示されます。'));
     S.cleaners.forEach(c => {
       const card = el('div', 'card mgr-row');
-      const top = el('div', 'top'); top.append(el('span', 'nm', c.name));
+      const top = el('div', 'top');
+      const ni = el('input', 'nm-in'); ni.type = 'text'; ni.value = c.name; ni.setAttribute('aria-label', '名前');
+      ni.onchange = () => { const v = ni.value.trim(); if (v) c.name = v; else ni.value = c.name; };
+      top.append(ni);
       const ls = el('select'); ls.setAttribute('aria-label', c.name + ' の言語');
       LANGS.forEach(([k, n]) => { const o = el('option', null, n + '(' + LANG_JA[k] + ')'); o.value = k; ls.append(o); }); ls.value = c.lang;
       ls.onchange = () => { c.lang = ls.value; };
@@ -721,7 +785,11 @@
   function ownerSettings() {
     const wrap = el('div', 'mgr');
     const rc = el('div', 'card panel rule');
-    rc.append(el('h2', null, '自動送信とフォローの流れ'));
+    const rh = el('div', 'ban-head');
+    const rt = el('button', 'btn small ghost', UI.flowOpen ? '閉じる ▲' : '詳細を見る ▼'); rt.type = 'button'; rt.setAttribute('aria-expanded', String(UI.flowOpen));
+    rt.onclick = () => { UI.flowOpen = !UI.flowOpen; render(); };
+    rh.append(el('h2', null, '自動送信とフォローの流れ'), rt); rc.append(rh);
+    if (!UI.flowOpen) rc.append(el('div', 'note', '予約が入るとメイン担当に自動送信 → 1日返事がなければ自動で催促 → 「行けない」・' + S.rule.replyDays + '日返事なし・直前の予約は「要フォロー」に表示。返事を待つ日数などの設定は「詳細を見る」から変えられます。'));
     const step = (n, node) => { const r = el('div', 'step'); const d = el('div'); d.append(node); r.append(el('b', null, String(n)), d); return r; };
     const sel = el('select'); sel.setAttribute('aria-label', '返事を待つ日数');
     [2, 3].forEach(n => { const o = el('option', null, n + '日'); o.value = String(n); sel.append(o); }); sel.value = String(S.rule.replyDays);
@@ -731,7 +799,7 @@
     hz.onchange = () => { S.rule.horizon = Number(hz.value); render(); };
     const s1x = el('span'); s1x.append(document.createTextNode('チェックアウトの予約が入ると、その施設の「メイン担当」に清掃の依頼を自動で送ります。対象は、清掃日が今日から '), hz, document.createTextNode(' 以内の予約です。それより先の予約は、その期間に入った時点で自動で送ります。'));
     const s3 = el('span'); s3.append(document.createTextNode('次のどれかに当てはまると、オーナーの画面に「要フォロー」と表示します。①「行けない」の返事が来た ②送信から '), sel, document.createTextNode(' たっても返事がない ③清掃日が今日・明日なのに返事がない(前日に入った予約など。日数を待たずにすぐ表示)。オーナーは「もう一度送る」か「代わりの人に依頼」を選びます。'));
-    rc.append(
+    if (UI.flowOpen) rc.append(
       step(1, s1x),
       step(2, document.createTextNode('清掃員は「OK・時間を選ぶ」または「行けない」で返事をします。')),
       step(3, document.createTextNode('送信から1日たっても返事がないときは、アプリが自動でもう一度お知らせして、返事を促します。')),
@@ -753,13 +821,23 @@
       td1.append(s1); tr.append(td1);
       const td2 = el('td'); const inp = el('input'); inp.type = 'number'; inp.step = '500'; inp.value = p.rate; inp.setAttribute('aria-label', p.name + ' 清掃料');
       inp.onchange = () => { p.rate = Number(inp.value) || 0; }; td2.append(inp); tr.append(td2);
-      const td3 = el('td'); td3.style.whiteSpace = 'normal'; const ch = el('div', 'checks');
-      S.cleaners.forEach(c => {
-        const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = p.members.includes(c.id);
-        cb.onchange = () => { if (cb.checked) p.members.push(c.id); else { p.members = p.members.filter(x => x !== c.id); if (p.main === c.id) p.main = null; } render(); };
-        lab.append(cb, document.createTextNode(c.name)); ch.append(lab);
-      });
-      td3.append(ch); tr.append(td3);
+      const td3 = el('td'); td3.style.whiteSpace = 'normal';
+      const editing = UI.editMembers === p.id;
+      if (editing) {
+        const ch = el('div', 'checks');
+        S.cleaners.forEach(c => {
+          const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.checked = p.members.includes(c.id);
+          cb.onchange = () => { if (cb.checked) p.members.push(c.id); else { p.members = p.members.filter(x => x !== c.id); if (p.main === c.id) p.main = null; } render(); };
+          lab.append(cb, document.createTextNode(c.name)); ch.append(lab);
+        });
+        td3.append(ch);
+      } else {
+        const mem = S.cleaners.filter(c => p.members.includes(c.id));
+        td3.append(el('div', mem.length ? 'members' : 'note', mem.length ? mem.map(c => c.name).join('、') : '(担当なし)'));
+      }
+      const eb = el('button', 'linkbtn', editing ? '完了' : '変更'); eb.type = 'button';
+      eb.onclick = () => { UI.editMembers = editing ? null : p.id; render(); };
+      td3.append(eb); tr.append(td3);
       const td4 = el('td'); const s3 = el('select');
       S.cleaners.filter(c => p.members.includes(c.id)).forEach(c => { const op = el('option', null, c.name); op.value = c.id; s3.append(op); });
       { const op = el('option', null, p.members.length ? '(未設定)' : '(担当なし)'); op.value = ''; s3.prepend(op); }
@@ -768,7 +846,7 @@
       body.append(tr);
     });
     tb.append(thead, body); tw.append(tb); card.append(tw);
-    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。メイン担当は自動送信の送り先です。'));
+    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。担当は「変更」から選ぶか、「清掃員」タブでまとめて選べます(すべての施設もまとめて選べます)。メイン担当は自動送信の送り先です。'));
     wrap.append(card);
     return wrap;
   }
@@ -925,14 +1003,30 @@
     return out;
   }
   const expFor = (cid, month, status) => S.expenses.filter(e => e.c === cid && e.date.slice(0, 7) === month && (!status || e.status === status));
+  function monthTotal(cid, m) { return payFor(cid, m).reduce((s0, r) => s0 + r.amount, 0) + expFor(cid, m, 'approved').reduce((s0, e) => s0 + e.amount, 0); }
+  function monthPicker(value, onPick, lang, label) {
+    const l = el('label', 'field month-pick'); l.append(document.createTextNode(label));
+    const sel = el('select');
+    PAY_MONTHS.forEach(m => { const o = el('option', null, monthName(m, lang)); o.value = m; sel.append(o); });
+    sel.value = value; sel.onchange = () => onPick(sel.value);
+    l.append(sel); return l;
+  }
   function cleanerPay() {
-    const month = TODAY.slice(0, 7);
+    const month = UI.payM;
+    const out = [];
+    const ask = toConfirm(UI.who);
+    if (ask.length && !ask.includes(month)) {
+      const bn = el('div', 'banner warn flash'); bn.append(el('div', 'h', monthName(ask[0], UI.lang) + t('confirmAsk')));
+      const go = el('button', 'btn small', t('openIt')); go.type = 'button'; go.onclick = () => { UI.payM = ask[0]; render(); };
+      bn.append(go); out.push(bn);
+    }
+    out.push(monthPicker(month, (m) => { UI.payM = m; render(); }, UI.lang, t('pickMonth')));
     const rows = payFor(UI.who, month);
     const fee = rows.reduce((s, r) => s + r.amount, 0);
     const exps = expFor(UI.who, month);
     const reimb = exps.filter(e => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
     const top = el('div', 'card pay-total');
-    top.append(el('div', 'muted', t('totalPay')), el('div', 'v', yen(fee + reimb)));
+    top.append(el('div', 'muted', monthName(month, UI.lang) + ' · ' + t('payTotal')), el('div', 'v', yen(fee + reimb)));
     const br = el('div', 'card breakdown');
     const r1 = el('div', 'pay-row'); r1.append(el('span', null, t('fee') + ' (' + rows.length + ' ' + t('times') + ')'), el('b', null, yen(fee)));
     const r2 = el('div', 'pay-row'); r2.append(el('span', null, t('reimb')), el('b', null, yen(reimb)));
@@ -940,7 +1034,9 @@
     const key = UI.who + '|' + month;
     const cb = el('div', 'card confirm-box');
     if (S.confirms[key]) cb.append(el('div', 'confirmed', '✓ ' + t('confirmedAt') + ' ' + S.confirms[key]));
-    else { const b = el('button', 'btn', t('confirmBtn')); b.type = 'button'; b.onclick = () => { S.confirms[key] = stamp(); addLog(UI.who, cl(UI.who).name, '明細の内容を確認'); render(); }; cb.append(b); }
+    else if (month >= THIS_MONTH) cb.append(el('div', 'note', t('confirmLater')));
+    else if (fee + reimb > 0) { const b = el('button', 'btn', t('confirmBtn')); b.type = 'button'; b.onclick = () => { S.confirms[key] = stamp(); addLog(UI.who, cl(UI.who).name, Number(month.slice(5)) + '月分の明細の内容を確認'); render(); }; cb.append(b); }
+    else cb.hidden = true;
     const eh = el('div', 'sec-title', t('expTitle'));
     const add = el('button', 'btn ghost', '+ ' + t('addExp')); add.type = 'button'; add.onclick = () => openExpense(null);
     const elist = el('div', 'olist');
@@ -954,7 +1050,8 @@
       const l = el('div'); l.append(el('div', null, dateFmt(r.j.date, UI.lang) + ' ' + r.j.prop)); if (r.half) l.append(el('div', 'half', t('half')));
       row.append(l, el('div', 'tnum', yen(r.amount))); list.append(row);
     });
-    return [top, br, cb, eh, add, elist, fh, list];
+    out.push(top, br, cb, eh); if (month === THIS_MONTH) out.push(add); out.push(elist, fh, list);
+    return out;
   }
   function expStatusPill(e, ja) {
     const m = { pending: ['s-wait', ja ? '確認待ち' : t('st_pending')], approved: ['s-done', ja ? '承認済み' : t('st_approved')], returned: ['s-bad', ja ? '差し戻し' : t('st_returned')] };
@@ -965,7 +1062,7 @@
     const th = el('button', 'thumb'); th.type = 'button'; th.setAttribute('aria-label', 'receipt');
     const img = el('img'); img.src = e.photo; img.alt = 'receipt'; th.append(img); th.onclick = () => openImage(e.photo); c.append(th);
     const mid = el('div');
-    mid.append(el('div', 't1', e.store || '—'), el('div', 't2', [owner ? jaDate(e.date) : dateFmt(e.date, UI.lang), e.item, e.prop].filter(Boolean).join(' · ')));
+    mid.append(el('div', 't1', e.item || e.store || '—'), el('div', 't2', [owner ? jaDate(e.date) : dateFmt(e.date, UI.lang), e.store, e.prop].filter(Boolean).join(' · ')));
     if (owner) mid.append(el('div', 't2', '清掃員:' + cl(e.c).name));
     const st = el('div'); st.style.marginTop = '4px'; st.append(expStatusPill(e, owner)); mid.append(st);
     c.append(mid, el('div', 'amt', yen(e.amount)));
@@ -1000,10 +1097,9 @@
       const f = (label, inp) => { const l = el('label', 'field'); l.append(document.createTextNode(label), inp); return l; };
       const di = el('input'); di.type = 'date'; di.value = d.date; di.onchange = () => { d.date = di.value || TODAY; };
       const ai = el('input'); ai.type = 'number'; ai.inputMode = 'numeric'; ai.min = '0'; ai.value = d.amount; ai.oninput = () => { d.amount = ai.value; };
-      const si = el('input'); si.type = 'text'; si.value = d.store; si.oninput = () => { d.store = si.value; };
       const ii = el('input'); ii.type = 'text'; ii.value = d.item; ii.oninput = () => { d.item = ii.value; };
       const ps = el('select'); (mine.length ? mine : S.props).forEach(p => { const o = el('option', null, p.name); o.value = p.name; ps.append(o); }); ps.value = d.prop; ps.onchange = () => { d.prop = ps.value; };
-      sh.append(f(t('amount'), ai), f(t('pdate'), di), f(t('store'), si), f(t('item'), ii), f(t('forProp'), ps));
+      sh.append(f(t('amount'), ai), f(t('pdate'), di), f(t('item'), ii), f(t('forProp'), ps));
       if (err) { const m = el('div', 'msg', err); m.style.color = 'var(--bad)'; m.style.fontWeight = '700'; sh.append(m); }
       const row = el('div', 'row');
       const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
@@ -1012,7 +1108,7 @@
         const amt = Number(d.amount);
         if (!d.photo || !(amt > 0)) { err = t('needPhoto'); render(); return; }
         if (existing) { Object.assign(existing, { ...d, amount: amt, status: 'pending', reason: '' }); addLog(UI.who, cl(UI.who).name, '立替を修正して再提出(' + yen(amt) + ')'); }
-        else { S.expenses.push({ id: crypto.randomUUID(), c: UI.who, ...d, amount: amt, status: 'pending', invoiceNo: '', taxRate: '10' }); addLog(UI.who, cl(UI.who).name, '立替を登録(' + yen(amt) + ' ' + (d.store || '') + ')'); }
+        else { S.expenses.push({ id: crypto.randomUUID(), c: UI.who, ...d, amount: amt, status: 'pending', invoiceNo: '', taxRate: '10' }); addLog(UI.who, cl(UI.who).name, '立替を登録(' + yen(amt) + (d.item ? ' ' + d.item : '') + ')'); }
         UI.sheet = null; render();
       };
       row.append(cancel, go); sh.append(row); bg.append(sh); return bg;
@@ -1041,11 +1137,12 @@
     const f = (label, inp) => { const l = el('label', 'field'); l.append(document.createTextNode(label), inp); return l; };
     const inv = el('input'); inv.type = 'text'; inv.placeholder = 'T + 13桁'; inv.value = e.invoiceNo || ''; inv.oninput = () => { e.invoiceNo = inv.value.trim(); };
     const tx = el('select'); [['10', '10%'], ['8', '8%(軽減)'], ['mix', '10%と8%が混在']].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; tx.append(o); }); tx.value = e.taxRate || '10'; tx.onchange = () => { e.taxRate = tx.value; };
-    box.append(f('インボイス登録番号(レシートを見て入力)', inv), f('税率', tx));
+    const st0 = el('input'); st0.type = 'text'; st0.placeholder = 'レシートの店名'; st0.value = e.store || ''; st0.oninput = () => { e.store = st0.value.trim(); };
+    box.append(f('お店(任意・明細書用)', st0), f('インボイス登録番号(レシートを見て入力)', inv), f('税率', tx));
     if (e.status === 'pending') {
       const rs = el('input'); rs.type = 'text'; rs.placeholder = '差し戻す場合の理由';
       const ok = el('button', 'btn small', '承認'); ok.type = 'button'; ok.style.background = 'var(--done)'; ok.style.borderColor = 'var(--done)';
-      ok.onclick = () => { e.status = 'approved'; e.approvedAt = stamp(); addLog(e.c, 'オーナー', '立替を承認(' + yen(e.amount) + ' ' + e.store + ')'); render(); };
+      ok.onclick = () => { e.status = 'approved'; e.approvedAt = stamp(); addLog(e.c, 'オーナー', '立替を承認(' + yen(e.amount) + (e.item ? ' ' + e.item : '') + ')'); render(); };
       const ng = el('button', 'btn ghost small', '差し戻す'); ng.type = 'button';
       ng.onclick = () => { if (!rs.value.trim()) { rs.focus(); rs.placeholder = '理由を入力してください'; return; } e.status = 'returned'; e.reason = rs.value.trim(); addLog(e.c, 'オーナー', '立替を差し戻し(理由:' + e.reason + ')'); render(); };
       box.append(f('差し戻しの理由', rs), ok, ng);
@@ -1071,8 +1168,9 @@
   }
   function ownerPay() {
     if (UI.stmt) return statement(UI.stmt);
-    const month = TODAY.slice(0, 7);
+    const month = UI.payMO;
     const card = el('div', 'card panel');
+    card.append(monthPicker(month, (m) => { UI.payMO = m; render(); }, 'ja', '対象の月'));
     card.append(el('h2', null, Number(month.slice(5)) + '月の支払い(清掃料+立替精算)'));
     const tw = el('div', 'table-wrap'); const tb = el('table');
     const hr = el('tr'); ['清掃員', '清掃', '清掃料', '立替精算', '支払合計', '本人確認', ''].forEach((x, i) => hr.append(el('th', i && i < 5 ? 'num' : null, x)));
@@ -1085,7 +1183,7 @@
       all += fee + reimb;
       const tr = el('tr');
       const rtd = el('td', 'num', yen(reimb)); if (pend) { rtd.append(el('div', 'note', '確認待ち ' + pend + '件')); }
-      const ctd = el('td', null, S.confirms[c.id + '|' + month] ? '✓ ' + S.confirms[c.id + '|' + month] : '未確認');
+      const ctd = el('td', null, S.confirms[c.id + '|' + month] ? '✓ ' + S.confirms[c.id + '|' + month] : month >= THIS_MONTH ? '翌月1日から' : fee + reimb > 0 ? '未確認' : '—');
       const btd = el('td'); const b = el('button', 'btn ghost small', '明細書'); b.type = 'button'; b.onclick = () => { UI.stmt = c.id; render(); }; btd.append(b);
       tr.append(el('td', null, c.name), el('td', 'num', rows.length + '回'), el('td', 'num', yen(fee)), rtd, el('td', 'num', yen(fee + reimb)), ctd, btd);
       body.append(tr);
@@ -1093,11 +1191,11 @@
     const tr = el('tr'); const td = el('td', null, '合計'); td.style.fontWeight = '700'; const tdv = el('td', 'num', yen(all)); tdv.style.fontWeight = '700';
     tr.append(td, el('td'), el('td'), el('td'), tdv, el('td'), el('td')); body.append(tr);
     tb.append(thead, body); tw.append(tb); card.append(tw);
-    card.append(el('div', 'note', '清掃料は施設ごとの固定額で、2名で入った清掃は半額ずつです。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
+    card.append(el('div', 'note', '清掃員の「本人確認」は、翌月1日から押せます。清掃料は施設ごとの固定額で、2名で入った清掃は半額ずつです。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
     return card;
   }
   function statement(cid) {
-    const month = TODAY.slice(0, 7), c = cl(cid);
+    const month = UI.payMO, c = cl(cid);
     const rows = payFor(cid, month), fee = rows.reduce((s, r) => s + r.amount, 0);
     const exps = expFor(cid, month, 'approved'), reimb = exps.reduce((s, e) => s + e.amount, 0);
     const lastDay = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate();
@@ -1136,7 +1234,7 @@
       });
       const f2 = el('tr'); const f2a = el('td', null, '小計'); f2a.colSpan = 6; f2a.style.fontWeight = '700'; const f2b = el('td', 'num', yen(reimb)); f2b.style.fontWeight = '700'; f2.append(f2a, f2b, el('td')); b2.append(f2);
       t2.append(th2, b2); const w2 = el('div', 'table-wrap'); w2.append(t2); s.append(w2);
-    } else s.append(el('div', 'note', '今月の承認済みの立替はありません。'));
+    } else s.append(el('div', 'note', 'この月の承認済みの立替はありません。'));
     // records
     s.append(el('h3', null, '3. 確認の記録'));
     const rec = el('dl', 'rec');
@@ -1166,6 +1264,7 @@
     try { S = await loadState(); } catch (e) { console.error(e); $('gate').hidden = false; $('gate-msg').textContent = 'データを読み込めませんでした。時間をおいて、もう一度開いてください。'; return; }
     takeSnap();
     UI.modeO = loadMode('O'); UI.modeC = loadMode('C');
+    if (S.jobs.some(j => j.date === TODAY)) UI.otab = 'today';
     $('wrap').hidden = false;
     render();
     document.addEventListener('change', () => persist()); // fields that do not redraw the screen
