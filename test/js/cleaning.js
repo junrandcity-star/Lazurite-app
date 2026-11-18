@@ -576,6 +576,7 @@
     // top tabs: 清掃 / お金 / 設定 ; under them, the items of the chosen one
     const cur = GROUPS.find(([, items]) => items.some(([k]) => k === UI.otab)) || GROUPS[0];
     const pendExp = S.expenses.filter(e => e.status === 'pending').length;
+    const followN = S.jobs.filter(j => j.date >= TODAY && needsFollow(j)).length; // same count as the follow card in 予定
     const gt = el('div', 'og-tabs'); gt.setAttribute('role', 'tablist');
     GROUPS.forEach(([gl, items]) => {
       const on = cur[0] === gl;
@@ -590,6 +591,7 @@
       const b = el('button', null, l); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.otab === k));
       b.onclick = () => { UI.otab = k; UI.stmt = null; UI.lastTab = Object.assign(UI.lastTab || {}, { [cur[0]]: k }); render(); };
       if (k === 'exp' && pendExp) b.append(document.createTextNode(' (' + pendExp + ')'));
+      if (k === 'jobs' && followN) b.append(el('span', 'tbadge num', String(followN)));
       if (k === 'today' && todayList.length) { b.classList.add('has-today'); b.append(el('span', 'tbadge' + (todayLeft ? '' : ' fin'), todayLeft ? 'あと' + todayLeft + '件' : '完了')); }
       tabs.append(b);
     });
