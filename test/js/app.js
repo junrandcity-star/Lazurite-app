@@ -19,7 +19,7 @@
   const P_COLORS = ["var(--p1)", "var(--p2)", "var(--p3)", "var(--p4)", "var(--p5)", "var(--p6)", "var(--p7)", "var(--p8)"];
 
   const S = {
-    user: null, loaded: false, tab: "dash", prop: ALL, period: "cur", metric: "sales",
+    user: null, loaded: false, tab: location.hash === "#todo" ? "todo" : "dash", prop: ALL, period: "cur", metric: "sales",
     props: [], res: [], nights: [], memos: {}, todos: [],
     sub: "res", q: "", past: false, open: null, limit: 40, confirmDel: null,
   };
