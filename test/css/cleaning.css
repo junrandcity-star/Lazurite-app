@@ -365,3 +365,8 @@ td .members { font-weight: 500; margin-bottom: 2px; }
 .fee-edited { font-weight: 700; color: var(--wait); }
 .stmt td .note { font-size: .72rem; white-space: normal; }
 @media print { .no-print { display: none !important; } }
+/* ---- LINE linking ---- */
+.line-box { border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.line-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.line-mark { background: #06c755; color: #fff; font-weight: 700; font-size: .72rem; border-radius: 6px; padding: 2px 7px; letter-spacing: .03em; }
+.line-code { font-size: 1.15rem; letter-spacing: .12em; font-variant-numeric: tabular-nums; }

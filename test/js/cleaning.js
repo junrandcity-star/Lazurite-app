@@ -53,7 +53,7 @@
   async function loadState() {
     const sync = await sb.rpc('cleaning_sync'); // automatic requests / reminders / cancellations
     if (sync.error) console.error(sync.error);
-    const [props, pc, pm, cleaners, res, asg, areas, exps, confs, log, msgs, set] = await Promise.all([
+    const [props, pc, pm, cleaners, res, asg, areas, exps, confs, log, msgs, set, myLine] = await Promise.all([
       q(sb.from('properties').select('id,name').order('name')),
       q(sb.from('property_cleaning').select('*')),
       q(sb.from('property_cleaners').select('*')),
@@ -66,6 +66,7 @@
       q(sb.from('cleaning_log').select('*').order('id', { ascending: false }).limit(300)),
       q(sb.from('cleaning_messages').select('*').eq('audience', 'owner').order('id', { ascending: false }).limit(30)),
       q(sb.from('cleaning_settings').select('*').eq('id', 1).maybeSingle()),
+      q(sb.from('owner_line').select('*').maybeSingle()), // only my own row (RLS)
     ]);
     const paths = areas.map(a => a.photo_path).concat(exps.map(e => e.photo_path)).filter(Boolean);
     const urls = {};
@@ -77,7 +78,8 @@
     const nameOf = Object.fromEntries(props.map(p => [p.id, p.name]));
     const cIds = new Set(cleaners.map(c => c.id));
     const st = {};
-    st.cleaners = cleaners.map(c => ({ id: c.id, name: c.name, lang: c.lang, contact: c.contact }));
+    st.cleaners = cleaners.map(c => ({ id: c.id, name: c.name, lang: c.lang, contact: c.contact, line: { linked: !!c.line_user_id, code: c.line_code, at: c.line_linked_at } }));
+    st.myLine = { linked: !!(myLine && myLine.line_user_id), code: myLine ? myLine.line_code : null, at: myLine ? myLine.line_linked_at : null };
     st.props = props.map(p => { const x = pcBy[p.id] || {}; return {
       id: p.id, name: p.name, out: x.out_time || '10:00', in: x.in_time || '16:00', rate: x.rate || 0,
       main: cIds.has(x.main_cleaner_id) ? x.main_cleaner_id : null,
@@ -798,8 +800,62 @@
     return box;
   }
 
+  // ---------- LINE linking ----------
+  const newCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+  async function issueCode(target) { // target: cleaner object, or 'me'
+    for (let i = 0; i < 3; i++) {
+      const code = newCode();
+      let r;
+      if (target === 'me') {
+        const { data } = await sb.auth.getSession();
+        r = await sb.from('owner_line').upsert({ user_id: data.session.user.id, line_code: code }, { onConflict: 'user_id' });
+        if (!r.error) { S.myLine.code = code; render(); return; }
+      } else {
+        r = await sb.from('cleaners').update({ line_code: code }).eq('id', target.id);
+        if (!r.error) { target.line.code = code; render(); return; }
+      }
+      if (!(r.error && r.error.code === '23505')) { console.error(r.error); setSave('error'); return; } // 23505: the same code already exists, try another
+    }
+  }
+  async function testSend(body, key) {
+    UI.lineMsg = Object.assign(UI.lineMsg || {}, { [key]: '送信しています…' }); render();
+    const { error } = await sb.functions.invoke('line-push', { body });
+    const st = error && error.context && error.context.status;
+    UI.lineMsg[key] = !error ? '✓ テストのメッセージを送りました。LINE に届いたか確認してください。' : st === 503 ? 'LINE の設定(アクセストークン)がまだ終わっていません。' : st === 404 ? 'まだ LINE とつながっていません。' : '送れませんでした。時間をおいてもう一度試してください。';
+    if (error && st !== 503 && st !== 404) console.error(error);
+    render();
+  }
+  function lineBox(state, onIssue, onTest, key, who) {
+    const box = el('div', 'line-box');
+    const head = el('div', 'line-head');
+    head.append(el('span', 'line-mark', 'LINE'));
+    if (state.linked) {
+      head.append(el('span', 'pill s-ok', '✓ 連携済み'), el('span', 'note', state.at ? fmtAt(state.at) + ' に連携' : ''));
+      const tb = el('button', 'btn ghost small', 'テスト送信'); tb.type = 'button'; tb.onclick = onTest; head.append(tb);
+    } else {
+      head.append(el('span', 'pill s-wait', '未連携'));
+      if (state.code) {
+        head.append(el('span', null, '連携コード'), el('b', 'line-code', state.code.slice(0, 3) + ' ' + state.code.slice(3)));
+        const nb = el('button', 'linkbtn', '作り直す'); nb.type = 'button'; nb.onclick = onIssue; head.append(nb);
+      } else {
+        const ib = el('button', 'btn ghost small', '連携コードを作る'); ib.type = 'button'; ib.onclick = onIssue; head.append(ib);
+      }
+    }
+    box.append(head);
+    if (!state.linked && state.code) box.append(el('div', 'note', who + '、LINE 公式アカウントを友だち追加し、このコード(6桁の数字)をトークに送ると連携されます。連携できたら「状態を更新」を押してください。'));
+    if (UI.lineMsg && UI.lineMsg[key]) box.append(el('div', 'note', UI.lineMsg[key]));
+    return box;
+  }
+
   function ownerCleaners() {
     const wrap = el('div', 'mgr');
+    const me0 = el('div', 'card panel');
+    const mh = el('div', 'ban-head'); mh.append(el('h2', null, 'あなた(オーナー)の LINE 通知'));
+    const rf = el('button', 'btn ghost small', '状態を更新'); rf.type = 'button'; rf.onclick = () => { UI.lineMsg = {}; saving = saving.then(reload).catch(e => console.error(e)); };
+    mh.append(rf); me0.append(mh);
+    me0.append(el('div', 'note', '清掃員からの返事・開始・完了などを LINE で受け取るための設定です。ご夫婦それぞれのログインで設定します。'));
+    me0.append(lineBox(S.myLine, () => issueCode('me'), () => testSend({ owner: true }, 'me'), 'me', 'ご自分のスマホで'));
+    wrap.append(me0);
     wrap.append(el('div', 'note', '清掃員ごとに、名前・表示する言語・連絡方法・担当する施設を設定します。名前は欄を直すと変わります(これまでの記録はそのまま残ります)。清掃員の画面には、担当施設の清掃とガイドだけが表示されます。'));
     S.cleaners.forEach(c => {
       const card = el('div', 'card mgr-row');
@@ -824,6 +880,7 @@
         UI.delC = null; render();
       };
       top.append(ls, cs, del); card.append(top);
+      if (c.line) card.append(lineBox(c.line, () => issueCode(c), () => testSend({ cleaner_id: c.id }, c.id), c.id, c.name + ' さんが'));
       card.append(el('div', 'note', '担当施設'));
       card.append(propChecks(p => p.members.includes(c.id), (p, on) => {
         if (on && !p.members.includes(c.id)) p.members.push(c.id);
@@ -848,7 +905,7 @@
     btn.onclick = () => {
       const name = nm.value.trim(); if (!name) { msg.textContent = '名前を入力してください。'; nm.focus(); return; }
       const id = crypto.randomUUID();
-      S.cleaners.push({ id, name, lang: lg.value, contact: ct.value });
+      S.cleaners.push({ id, name, lang: lg.value, contact: ct.value, line: { linked: false, code: null, at: null } });
       S.props.forEach(p => { if (pick.has(p.name)) p.members.push(id); });
       render();
     };
