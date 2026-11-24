@@ -72,15 +72,14 @@ async function linkByCode(code: string, lineUserId: string): Promise<Lang | null
   const now = new Date().toISOString();
   const c = await db("cleaners?line_code=eq." + code + "&select=id,lang");
   if (c.length) {
-    // one LINE account belongs to one person: release it from anyone else first
+    // one LINE account is one cleaner (it may also be an owner: an owner can clean in an emergency)
     await db("cleaners?line_user_id=eq." + encodeURIComponent(lineUserId), "PATCH", { line_user_id: null, line_linked_at: null });
-    await db("owner_line?line_user_id=eq." + encodeURIComponent(lineUserId), "PATCH", { line_user_id: null, line_linked_at: null });
     await db("cleaners?id=eq." + c[0].id, "PATCH", { line_user_id: lineUserId, line_code: null, line_linked_at: now });
     return (ALL_LANGS.includes(c[0].lang) ? c[0].lang : "ja") as Lang;
   }
   const o = await db("owner_line?line_code=eq." + code + "&select=user_id");
   if (o.length) {
-    await db("cleaners?line_user_id=eq." + encodeURIComponent(lineUserId), "PATCH", { line_user_id: null, line_linked_at: null });
+    // one LINE account is one owner login (it may also be a cleaner)
     await db("owner_line?line_user_id=eq." + encodeURIComponent(lineUserId), "PATCH", { line_user_id: null, line_linked_at: null });
     await db("owner_line?user_id=eq." + o[0].user_id, "PATCH", { line_user_id: lineUserId, line_code: null, line_linked_at: now });
     return "ja";

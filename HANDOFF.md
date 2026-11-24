@@ -100,7 +100,7 @@
 - 注意(未対応):清掃料は施設の「今の単価」から計算しているため、単価を変えると過去の月の金額も変わる。必要なら、完了時の単価を記録する形に直す。
 - LINE 公式アカウントはオーナーが取得中(認証済アカウントの審査中)。審査を待たずに Messaging API の設定と試験を進める(オーナー希望)。
 - LINE 連携の仕組み(試験環境に配置):
-  - Edge Function `line-webhook`(verify_jwt=false、X-Line-Signature で確認):友だち追加で5言語の案内を返信、6桁コードで清掃員(`cleaners.line_user_id`)またはオーナー(`owner_line`、本人の行だけ読み書き)と LINE をつなぐ、ブロックで解除。返信は Reply API なので通数に数えない。コード以外のメッセージには返信しない(オーナーがチャットで読める)。
+  - Edge Function `line-webhook`(verify_jwt=false、X-Line-Signature で確認):友だち追加で5言語の案内を返信、6桁コードで清掃員(`cleaners.line_user_id`)またはオーナー(`owner_line`、本人の行だけ読み書き)と LINE をつなぐ、ブロックで解除。1つの LINE を「オーナー」と「清掃員」の両方につなげてよい(オーナーが緊急時に清掃に入る場合・試験用。11/24 変更)。清掃員どうし・オーナーどうしでは1つの LINE は1人だけ。返信は Reply API なので通数に数えない。コード以外のメッセージには返信しない(オーナーがチャットで読める)。
   - Edge Function `line-push`:ログインした人だけ。連携済みの清掃員/自分にテストのメッセージを1通送る(通数1)。
   - Secrets:`LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN`(オーナーが入力)。Webhook URL は試験用プロジェクトの `/functions/v1/line-webhook`。本番に移すときは Webhook URL を本番のものに変える(1つの公式アカウントに Webhook URL は1つだけ)。
   - 画面:「設定」→「清掃員」に、オーナー本人と各清掃員の「連携コードを作る」「テスト送信」「状態を更新」。
