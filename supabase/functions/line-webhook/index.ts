@@ -102,7 +102,13 @@ async function onPostback(token: string, lineUserId: string, data: string) {
     if (!choices.includes(t)) return reply(token, [text(tr("gone", lang))]);
     if (!(await patch({ status: "ok", plan_time: t })).length) return reply(token, [text(tr("gone", lang))]);
     await toOwners("【OK】" + who + " " + where + " " + t + " から", "ok", r, cId);
-    return reply(token, [text(tr("gotOk", lang, { d: dateLabel(j.date, lang), p: j.prop, t }))]);
+    const got = text(tr("gotOk", lang, { d: dateLabel(j.date, lang), p: j.prop, t }));
+    // accepted on the cleaning day itself (after the 7:55 morning message): give the start button now
+    if (j.date === now.date) {
+      return reply(token, [got, bubble(tr("todayTitle", lang), [dateLabel(j.date, lang) + " " + j.prop, tr("plan", lang, { t }), tr("todayText", lang)],
+        [{ label: tr("btnStart", lang), data: pb("start", r, cId), primary: true }])]);
+    }
+    return reply(token, [got]);
   }
   if (a === "cant") {
     if (!["wait", "ok"].includes(st) || j.date < now.date) return reply(token, [text(tr("gone", lang))]);

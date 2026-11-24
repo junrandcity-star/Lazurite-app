@@ -53,6 +53,15 @@ await H.postback('U_anan', 'a=done&r=3&c=' + C1); show(' done'); check(asg(3, C1
 console.log(' owner got:', LINE.filter((l) => l.path === 'multicast').pop().body.messages[0].text);
 await H.postback('U_anan', 'a=done&r=3&c=' + C1); show(' done again');
 
+// 5b. OK on the cleaning day itself -> reply carries the start button
+DB.cleaning_assignments.push({ reservation_id: 3, cleaner_id: C2, job_date: H.today, status: 'wait', plan_time: null, start_time: null });
+DB.cleaners[1].line_user_id = 'U_sato';
+await H.postback('U_sato', 'a=ok&r=3&c=' + C2 + '&t=11:00');
+const sameDay = LINE.filter((l) => l.path === 'reply').pop();
+console.log(' same-day ok reply:', sameDay.body.messages.map(H.textOf).join(' // '));
+check(sameDay.body.messages.length === 2 && JSON.stringify(sameDay.body.messages[1]).includes('a=start'), 'same-day OK has start button');
+DB.cleaners[1].line_user_id = null;
+
 // 6. can't go
 DB.cleaning_assignments.push({ reservation_id: 4, cleaner_id: C1, job_date: H.plus(2), status: 'wait', plan_time: null, start_time: null });
 await H.postback('U_anan', 'a=cant&r=4&c=' + C1); show(' cant'); check(asg(4, C1).status === 'cant', 'cant saved');
