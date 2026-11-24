@@ -84,7 +84,7 @@
       members: pm.filter(m => m.property_id === p.id && cIds.has(m.cleaner_id)).map(m => m.cleaner_id) }; });
     const asgBy = {};
     asg.forEach(a => { if (cIds.has(a.cleaner_id)) (asgBy[a.reservation_id] = asgBy[a.reservation_id] || []).push({
-      c: a.cleaner_id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, auto: a.auto, remind: a.remind_count, reminded: a.reminded_on }); });
+      c: a.cleaner_id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, auto: a.auto, remind: a.remind_count, reminded: a.reminded_on, fee: a.fee_override, feeNote: a.fee_note }); });
     const byProp = {};
     res.forEach(r => { (byProp[r.property_id] = byProp[r.property_id] || []).push(r); });
     st.jobs = res.filter(r => r.check_out && nameOf[r.property_id]).map(r => {
@@ -117,7 +117,7 @@
     out.property_cleaners = [];
     S.props.forEach(p => p.members.forEach(m => out.property_cleaners.push({ property_id: p.id, cleaner_id: m })));
     out.cleaning_assignments = [];
-    S.jobs.forEach(j => j.asg.forEach(a => out.cleaning_assignments.push({ reservation_id: j.id, cleaner_id: a.c, job_date: j.date, status: a.st, plan_time: a.plan || null, start_time: a.start || null, end_time: a.end || null, sent_on: a.sent || null, auto: !!a.auto, remind_count: a.remind || 0, reminded_on: a.reminded || null })));
+    S.jobs.forEach(j => j.asg.forEach(a => out.cleaning_assignments.push({ reservation_id: j.id, cleaner_id: a.c, job_date: j.date, status: a.st, plan_time: a.plan || null, start_time: a.start || null, end_time: a.end || null, sent_on: a.sent || null, auto: !!a.auto, remind_count: a.remind || 0, reminded_on: a.reminded || null, fee_override: a.fee == null ? null : a.fee, fee_note: a.feeNote || null })));
     out.guide_areas = [];
     Object.keys(S.guide).forEach(name => S.guide[name].forEach((ar, i) => out.guide_areas.push({ id: ar.id, property_id: pid(name), sort: i, name: ar.name, notes: ar.notes, photo_path: ar.photoPath || null })));
     out.cleaning_expenses = S.expenses.map(e => ({ id: e.id, cleaner_id: e.c, property_id: pid(e.prop), purchased_on: e.date, amount: e.amount, store: e.store || '', item: e.item || '', status: e.status, reason: e.reason || null, invoice_no: e.invoiceNo || null, tax_rate: e.taxRate || '10', approved_at: e.approvedAt || null, photo_path: e.photoPath || null }));
@@ -232,6 +232,7 @@
   Object.keys(T3).forEach(k => { T[k].notified = T3[k]; });
   const T4 = { ja: '清掃の当日に押せます', en: 'You can press this on the cleaning day', th: 'กดได้ในวันทำความสะอาด', ne: 'सरसफाइको दिन थिच्न सकिन्छ', vi: 'Bấm được vào ngày dọn dẹp' };
   Object.keys(T4).forEach(k => { T[k].onDay = T4[k]; });
+  const T6 = { ja: '金額を調整', en: 'Amount adjusted', th: 'ปรับยอดแล้ว', ne: 'रकम मिलाइएको', vi: 'Đã điều chỉnh' };
   const T5 = {
     ja: { today:'本日', todayEmpty:'今日の清掃はありません', payTotal:'お支払い', pickMonth:'月を選ぶ', confirmLater:'この月の明細は、翌月1日から確認できます', confirmAsk:'の明細を確認してください', openIt:'開く' },
     en: { today:'Today', todayEmpty:'No cleaning today', payTotal:'Payment', pickMonth:'Month', confirmLater:"You can confirm this month's statement from the 1st of next month.", confirmAsk:': please check your statement', openIt:'Open' },
@@ -240,6 +241,7 @@
     vi: { today:'Hôm nay', todayEmpty:'Hôm nay không có lịch dọn', payTotal:'Thanh toán', pickMonth:'Chọn tháng', confirmLater:'Bạn có thể xác nhận bảng kê tháng này từ ngày 1 tháng sau.', confirmAsk:': vui lòng kiểm tra bảng kê', openIt:'Mở' },
   };
   Object.keys(T5).forEach(k => Object.assign(T[k], T5[k]));
+  Object.keys(T6).forEach(k => { T[k].adjusted = T6[k]; });
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
   const monthName = (m, lang) => { try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { year: 'numeric', month: 'long', calendar: 'gregory' }).format(new Date(m + '-15T00:00:00')); } catch (e) { return m; } };
 
@@ -522,7 +524,9 @@
       if (j.date.slice(0, 7) !== month) return;
       const a = j.asg.find(x => x.c === cid && x.st === 'done'); if (!a) return;
       const share = j.asg.length >= 2 ? 0.5 : 1;
-      rows.push({ j, amount: prop(j.prop).rate * share, half: share < 1 });
+      const base = prop(j.prop).rate * share;
+      // the owner may have changed the fee for this cleaning (urgent request etc.)
+      rows.push({ j, a, base, amount: a.fee == null ? base : a.fee, edited: a.fee != null, note: a.feeNote || '', half: share < 1 });
     });
     return rows.sort((a, b) => a.j.date.localeCompare(b.j.date));
   }
@@ -1129,6 +1133,7 @@
     rows.forEach(r => {
       const row = el('div', 'pay-row');
       const l = el('div'); l.append(el('div', null, dateFmt(r.j.date, UI.lang) + ' ' + r.j.prop)); if (r.half) l.append(el('div', 'half', t('half')));
+      if (r.edited) l.append(el('div', 'half', t('adjusted') + (r.note ? '(' + r.note + ')' : '')));
       row.append(l, el('div', 'tnum', yen(r.amount))); list.append(row);
     });
     out.push(top, br, cb, eh); if (month === THIS_MONTH) out.push(add); out.push(elist, fh, list);
@@ -1272,8 +1277,62 @@
     const tr = el('tr'); const td = el('td', null, '合計'); td.style.fontWeight = '700'; const tdv = el('td', 'num', yen(all)); tdv.style.fontWeight = '700';
     tr.append(td, el('td'), el('td'), el('td'), tdv, el('td'), el('td')); body.append(tr);
     tb.append(thead, body); tw.append(tb); card.append(tw);
-    card.append(el('div', 'note', '清掃員の「本人確認」は、翌月1日から押せます。清掃料は施設ごとの固定額で、2名で入った清掃は半額ずつです。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
+    card.append(el('div', 'note', '清掃員の「本人確認」は、翌月1日から押せます。清掃料は施設ごとの固定額で、2名で入った清掃は半額ずつです。緊急対応などで金額を変えるときは、「明細書」の各行の「金額を変更」から変えられます。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
     return card;
+  }
+  function feeCell(r, cid, month) {
+    const td = el('td', 'num');
+    td.append(el('div', r.edited ? 'fee-edited' : null, yen(r.amount)));
+    if (r.edited) td.append(el('div', 'note', '変更' + (r.note ? ':' + r.note : '') + '(通常 ' + yen(r.base) + ')'));
+    const b = el('button', 'linkbtn no-print', '金額を変更'); b.type = 'button'; b.onclick = () => openFee(r, cid, month);
+    td.append(b);
+    return td;
+  }
+  function openFee(r, cid, month) {
+    let amt = String(r.amount), note = r.note, err = '';
+    const key = cid + '|' + month;
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, '清掃料を変更する'), el('div', 'muted', jaDate(r.j.date) + ' ' + r.j.prop + ' · ' + cl(cid).name + '(通常 ' + yen(r.base) + (r.half ? '・2名で折半' : '') + ')'));
+      const f = (label, input) => { const l = el('label', 'field'); l.append(document.createTextNode(label), input); return l; };
+      const ai = el('input'); ai.type = 'number'; ai.inputMode = 'numeric'; ai.min = '0'; ai.step = '100'; ai.value = amt; ai.oninput = () => { amt = ai.value; };
+      const ni = el('input'); ni.type = 'text'; ni.placeholder = '例:緊急対応のため割増'; ni.maxLength = 60; ni.value = note; ni.oninput = () => { note = ni.value; };
+      sh.append(f('この清掃で支払う金額(円)', ai), f('理由(清掃員の明細にも表示されます)', ni));
+      if (S.confirms[key]) sh.append(el('div', 'banner warn', 'この月の明細は、清掃員が確認済みです。金額を変えると確認は取り消され、清掃員にもう一度確認してもらう形になります。'));
+      if (err) sh.append(el('div', 'note', err));
+      const act = el('div', 'actions');
+      const save = el('button', 'btn', '保存する'); save.type = 'button';
+      save.onclick = () => {
+        const v = Number(amt);
+        if (amt === '' || !Number.isFinite(v) || v < 0 || v > 1000000 || Math.round(v) !== v) { err = '金額は0円以上の整数で入れてください。'; render(); return; }
+        const changed = v !== r.amount || note.trim() !== r.note;
+        r.a.fee = v === r.base && !note.trim() ? null : v; // same as usual and no reason: back to the normal fee
+        r.a.feeNote = r.a.fee == null ? null : note.trim() || null;
+        if (changed) {
+          addLog(cid, 'オーナー', jaDate(r.j.date) + ' ' + r.j.prop + ' の清掃料を ' + yen(r.amount) + ' → ' + yen(v) + ' に変更' + (note.trim() ? '(' + note.trim() + ')' : ''));
+          if (S.confirms[key]) { delete S.confirms[key]; addLog(cid, 'オーナー', Number(month.slice(5)) + '月分の明細の確認を取り消し(金額の変更のため)'); }
+        }
+        UI.sheet = null; render();
+      };
+      act.append(save);
+      if (r.edited) {
+        const reset = el('button', 'btn ghost', '通常の金額に戻す'); reset.type = 'button';
+        reset.onclick = () => {
+          r.a.fee = null; r.a.feeNote = null;
+          addLog(cid, 'オーナー', jaDate(r.j.date) + ' ' + r.j.prop + ' の清掃料を通常の金額(' + yen(r.base) + ')に戻した');
+          if (S.confirms[key]) { delete S.confirms[key]; addLog(cid, 'オーナー', Number(month.slice(5)) + '月分の明細の確認を取り消し(金額の変更のため)'); }
+          UI.sheet = null; render();
+        };
+        act.append(reset);
+      }
+      const cancel = el('button', 'btn ghost', 'やめる'); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
+      act.append(cancel);
+      sh.append(act); bg.append(sh);
+      setTimeout(() => ai.focus(), 0);
+      return bg;
+    };
+    render();
   }
   function statement(cid) {
     const month = UI.payMO, c = cl(cid);
@@ -1299,7 +1358,7 @@
     s.append(el('h3', null, '1. 清掃料の明細(' + rows.length + '件)'));
     const t1 = el('table'); const h1 = el('tr'); ['日付', '施設', '開始', '完了', '単価', '人数', '金額'].forEach((x, i) => h1.append(el('th', i >= 4 ? 'num' : null, x)));
     const th1 = el('thead'); th1.append(h1); const b1 = el('tbody');
-    rows.forEach(r => { const a = r.j.asg.find(x => x.c === cid); const tr = el('tr'); tr.append(el('td', null, jaDate(r.j.date)), el('td', null, r.j.prop), el('td', null, a.start || '—'), el('td', null, a.end || '—'), el('td', 'num', yen(prop(r.j.prop).rate)), el('td', 'num', r.half ? '2名(折半)' : '1名'), el('td', 'num', yen(r.amount))); b1.append(tr); });
+    rows.forEach(r => { const a = r.j.asg.find(x => x.c === cid); const tr = el('tr'); tr.append(el('td', null, jaDate(r.j.date)), el('td', null, r.j.prop), el('td', null, a.start || '—'), el('td', null, a.end || '—'), el('td', 'num', yen(prop(r.j.prop).rate)), el('td', 'num', r.half ? '2名(折半)' : '1名'), feeCell(r, cid, month)); b1.append(tr); });
     const f1 = el('tr'); const f1a = el('td', null, '小計'); f1a.colSpan = 6; f1a.style.fontWeight = '700'; const f1b = el('td', 'num', yen(fee)); f1b.style.fontWeight = '700'; f1.append(f1a, f1b); b1.append(f1);
     t1.append(th1, b1); const w1 = el('div', 'table-wrap'); w1.append(t1); s.append(w1);
     // reimbursement table

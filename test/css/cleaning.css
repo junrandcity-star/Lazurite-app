@@ -361,3 +361,7 @@ td .members { font-weight: 500; margin-bottom: 2px; }
 .ntc-body .follow { display: flex; flex-direction: column; gap: 6px; }
 .tr-pv { flex-basis: 100%; font-size: .74rem; color: var(--muted); padding-left: 2px; }
 .tbadge.num { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; vertical-align: 1px; }
+/* ---- fee changed by the owner ---- */
+.fee-edited { font-weight: 700; color: var(--wait); }
+.stmt td .note { font-size: .72rem; white-space: normal; }
+@media print { .no-print { display: none !important; } }
