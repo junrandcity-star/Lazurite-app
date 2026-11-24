@@ -104,7 +104,16 @@
   - Edge Function `line-push`:ログインした人だけ。連携済みの清掃員/自分にテストのメッセージを1通送る(通数1)。
   - Secrets:`LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN`(オーナーが入力)。Webhook URL は試験用プロジェクトの `/functions/v1/line-webhook`。本番に移すときは Webhook URL を本番のものに変える(1つの公式アカウントに Webhook URL は1つだけ)。
   - 画面:「設定」→「清掃員」に、オーナー本人と各清掃員の「連携コードを作る」「テスト送信」「状態を更新」。
-  - 依頼・催促・オーナー通知の実送信は未実装(次の段階)。
+  - (11/25)実送信を実装。オーナーはライトプラン(月5,000通)を検討中。
+    - `cleaning_messages` に記録 → トリガー `cleaning_messages_dispatch` が pg_net で Edge Function `line-send` を呼ぶ(合言葉は `cleaning_dispatch.key`、画面からは読めない)→ `cleaning_claim_messages()` で取り出して送る。結果は `send_status`(sent / no_line / stale / failed / expired)と `send_error`。1日以上前の未送信は送らない。導入前にたまっていた分は `skipped_before_line` にした。
+    - 清掃員へ:request / remind / change / cancel / today(Flex メッセージ、その人の言語、ボタン付き)。返事済みの依頼への催促などは送らない(stale)。
+    - 清掃員のボタン(postback `a=ok|cant|start|done&r=予約ID&c=清掃員ID[&t=時刻]`)は `line-webhook` が受ける。押した LINE がその清掃員本人か確認し、状態が変わっていなければ更新(二重押し対策)。OK は時刻をクイックリプライで選ぶ(チェックアウトから次のチェックインの2時間前まで30分刻み、アプリと同じ)。開始は当日のみ。返信は Reply API なので通数に数えない。
+    - オーナーへ:OK・行けない・開始・完了を、連携しているオーナー全員に(人数分の通数)。
+    - 当日の朝 7:55(pg_cron `cleaning-morning`)に OK 済みの清掃員へ「本日の清掃」+「清掃を始める」。
+    - アプリ:手動の依頼(request)・外した人(cancel)・「もう一度送る」(remind)も LINE で送る。保存が終わってから記録する。
+    - 共通部品は `supabase/functions/_shared/line.ts`(line-send と line-webhook が使う。配置時は `../_shared/line.ts` として一緒にアップロード)。
+    - 動作確認用:`tools/linetest/`(Node 22 で `node --experimental-strip-types tools/linetest/run.mjs`。データベースと LINE を模して全部の流れを確認)。
+    - 本番に移すとき:`cleaning_dispatch.url` を本番の line-send に、LINE の Webhook URL を本番の line-webhook に変える。
 - 翻訳:11/24 にオーナーが GOOGLE_TRANSLATE_KEY を設定し、翻訳できることを確認済み。
 
 ### 2026-11-20 ログインの注意

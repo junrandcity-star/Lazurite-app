@@ -559,6 +559,7 @@
         UI.flash = jaDate(j.date) + ' ' + j.prop + ':' + names(late) + 'にもう一度送信しました。';
         late.forEach(a => { a.sent = TODAY; a.remind = (a.remind || 0) + 1; });
         render();
+        toCleaners(late.map(a => ({ cleaner_id: a.c, reservation_id: j.id, kind: 'remind', body: jaDate(j.date) + ' ' + j.prop + ' の清掃依頼の再送' })));
       };
       out.push(r);
     }
@@ -768,7 +769,7 @@
           list.append(more);
         }
       }
-      sh.append(list, el('div', 'note', 'メイン担当には予約が入った時点で自動で送信済みです。ここでは、代わりの人や2人目に手動で依頼できます。チェックを外した人には取り消しのお知らせが届きます(本番ではメールやLINE)。'));
+      sh.append(list, el('div', 'note', 'メイン担当には予約が入った時点で自動で送信済みです。ここでは、代わりの人や2人目に手動で依頼できます。依頼した人には LINE で依頼が届き、チェックを外した人には取り消しのお知らせが届きます(LINE を連携している人のみ)。'));
       const r = el('div', 'row');
       const cancel = el('button', 'btn ghost', 'やめる'); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const go = el('button', 'btn', '依頼する'); go.type = 'button'; go.disabled = !sel.size;
@@ -776,7 +777,12 @@
         sel.forEach(id => { if (!p.members.includes(id)) p.members.push(id); });
         const keep = j.asg.filter(a => sel.has(a.c) && a.st !== 'cant');
         const added = [...sel].filter(id => !keep.some(a => a.c === id)).map(id => ({ c: id, st: 'wait', sent: TODAY }));
+        // people taken off who had not said "can't go" get a cancellation
+        const removed = j.asg.filter(a => !sel.has(a.c) && ['wait', 'ok'].includes(a.st));
         j.asg = keep.concat(added); UI.sheet = null; render();
+        const where = jaDate(j.date) + ' ' + j.prop;
+        toCleaners(added.map(a => ({ cleaner_id: a.c, reservation_id: j.id, kind: 'request', body: where + ' の清掃依頼' }))
+          .concat(removed.map(a => ({ cleaner_id: a.c, reservation_id: j.id, kind: 'cancel', body: where + ' の清掃依頼は取り消しになりました' }))));
       };
       r.append(cancel, go); sh.append(r);
       bg.append(sh); setTimeout(sync, 0); return bg;
@@ -933,12 +939,12 @@
     const s3 = el('span'); s3.append(document.createTextNode('次のどれかに当てはまると、オーナーの画面に「要フォロー」と表示します。①「行けない」の返事が来た ②送信から '), sel, document.createTextNode(' たっても返事がない ③清掃日が今日・明日なのに返事がない(前日に入った予約など。日数を待たずにすぐ表示)。オーナーは「もう一度送る」か「代わりの人に依頼」を選びます。'));
     if (UI.flowOpen) rc.append(
       step(1, s1x),
-      step(2, document.createTextNode('清掃員は「OK・時間を選ぶ」または「行けない」で返事をします。')),
+      step(2, document.createTextNode('清掃員は LINE のボタン「OK(時間を選ぶ)」または「行けない」で返事をします。')),
       step(3, document.createTextNode('送信から1日たっても返事がないときは、アプリが自動でもう一度お知らせして、返事を促します。')),
       step(4, s3),
-      step(5, document.createTextNode('清掃の当日、清掃員が「清掃を始める」「清掃が終わった」を押すと、時刻が記録され、オーナーに通知が届きます(LINE を予定)。')),
+      step(5, document.createTextNode('清掃の当日の朝、OK の返事をした清掃員に「本日の清掃」が届きます。清掃員が「清掃を始める」「清掃が終わった」を押すと、時刻が記録され、オーナーの LINE に通知が届きます。')),
       step(6, document.createTextNode('【将来の予定】「清掃が終わった」が押されたら、次のゲストに「清掃が終わったので入室できます」というメールを自動で送ります。Beds24 側のメール設定ができてから対応します。')),
-      el('div', 'note', '試験環境では、まだ実際のメール・LINE は送信しません。画面の上で動きを確認できます。'));
+      el('div', 'note', '依頼・催促・オーナーへの通知は LINE で送ります(LINE を連携している人のみ)。清掃員は LINE のボタンで返事や開始・完了ができます。'));
     wrap.append(rc);
     const card = el('div', 'card panel');
     card.append(el('h2', null, '施設と担当'));
@@ -1041,6 +1047,14 @@
   // ---------- shared: log, receipt sample, view mode ----------
   const stamp = () => { const d = new Date(); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const addLog = (cid, who, text) => { const at = stamp(); S.log.push({ cid, at, who, text }); sb.from('cleaning_log').insert({ cleaner_id: cid, at, who, body: text }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } }); };
+  // messages for cleaners (sent by LINE from the database). Queued after the pending save so the request exists first.
+  function toCleaners(rows) {
+    if (!rows.length) return;
+    saving = saving.then(async () => {
+      const { error } = await sb.from('cleaning_messages').insert(rows.map(r => Object.assign({ audience: 'cleaner' }, r)));
+      if (error) { console.error(error); setSave('error'); }
+    });
+  }
   // message the owner would receive (LINE in production)
   const notify = (text, kind) => { S.notices.unshift({ at: stamp(), text, kind, fresh: true }); sb.from('cleaning_messages').insert({ audience: 'owner', kind: kind || 'info', body: text }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } }); };
   function noticePanel() {
@@ -1052,7 +1066,7 @@
     box.append(head);
     if (UI.noticeOpen) {
       const body = el('div', 'ntc-body');
-      body.append(el('div', 'note', '清掃員が「OK」「行けない」「清掃を始める」「清掃が終わった」を押すと、オーナーに下の文面でお知らせする予定です(試験環境ではまだ LINE・メールは送信しません。この欄で確認できます)。'));
+      body.append(el('div', 'note', '清掃員が「OK」「行けない」「清掃を始める」「清掃が終わった」を押すと、LINE を連携しているオーナーに、下の文面が届きます。'));
       S.notices.slice(0, 20).forEach(n => { const r = el('div', 'ntc-row' + (n.kind === 'cant' ? ' cant' : '') + (n.fresh ? ' fresh' : '')); r.append(el('span', 'at', n.at), el('span', 'tx', n.text)); body.append(r); });
       box.append(body);
     }
