@@ -112,6 +112,7 @@
     - 当日の朝 7:55(pg_cron `cleaning-morning`)に OK 済みの清掃員へ「本日の清掃」+「清掃を始める」。
     - アプリ:手動の依頼(request)・外した人(cancel)・「もう一度送る」(remind)も LINE で送る。保存が終わってから記録する。
     - (11/25)毎時の `cleaning_sync()` で、LINE 連携済みの清掃員の返事待ちの依頼のうち、まだ LINE で届いていないものを送る(LINE 導入前の依頼、古い画面からの操作、後から LINE を連携した人のため)。画面を開いたときにも動く。
+    - (11/25)試験用と本番用で LINE 公式アカウントを分けた。試験環境は新しい「Lazurite Test」(未認証・無料プラン、プロバイダーは同じ「Lazurite」なので LINE の利用者 ID は共通)。本番用「Lazurite」は認証審査中で、名前は変えない(認証後は原則変更不可)。本番用の Webhook は本番の準備ができるまでオフ。
     - 共通部品は `supabase/functions/_shared/line.ts`(line-send と line-webhook が使う。配置時は `../_shared/line.ts` として一緒にアップロード)。
     - 動作確認用:`tools/linetest/`(Node 22 で `node --experimental-strip-types tools/linetest/run.mjs`。データベースと LINE を模して全部の流れを確認)。
     - 本番に移すとき:`cleaning_dispatch.url` を本番の line-send に、LINE の Webhook URL を本番の line-webhook に変える。
