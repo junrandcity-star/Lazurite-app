@@ -1,4 +1,4 @@
-# 引き継ぎメモ(2026-11-14 時点)
+# 引き継ぎメモ(2026-11-25 時点)
 
 新しいチャットで作業を続けるためのメモです。**作業を始める前に、このファイルと `TESTING.md` を読んでください。**
 
@@ -117,6 +117,19 @@
     - 動作確認用:`tools/linetest/`(Node 22 で `node --experimental-strip-types tools/linetest/run.mjs`。データベースと LINE を模して全部の流れを確認)。
     - 本番に移すとき:`cleaning_dispatch.url` を本番の line-send に、LINE の Webhook URL を本番の line-webhook に変える。
 - 翻訳:11/24 にオーナーが GOOGLE_TRANSLATE_KEY を設定し、翻訳できることを確認済み。
+
+### 2026-11-25 第2段階:清掃員は LINE のメニューからアプリを開く(試験環境)
+- 清掃員はメールのログイン不要。LINE のトーク画面下のメニュー(リッチメニュー)「本日 / 予定 / ガイド / お給料」を押すと、LINE の中でアプリが開き、LINE で自動ログインする。
+- LINE Login チャネル(プロバイダー「Lazurite」)の LIFF:LIFF ID `2012785420-TTEQZ4p7`、チャネル ID `2012785420`。エンドポイントは `test/staff.html`(GitHub Pages)。
+- `test/staff.html`:LIFF SDK → `window.LZ_STAFF = { liffId }` → `cleaning.js`。`cleaning.js` は `LZ_STAFF` があれば清掃員モード(`bootStaff()`、`?tab=today|jobs|guide|pay`)。データベースには直接触らず、すべて Edge Function `staff-api` 経由(ヘッダー `x-line-id-token`)。期限切れなどで 401 なら `liff.login()`。
+- Edge Function `staff-api`(verify_jwt=false):ID トークンを `https://api.line.me/oauth2/v2.1/verify`(client_id は env `LINE_LOGIN_CHANNEL_ID`、既定 2012785420)で確認 → `cleaners.line_user_id` が一致し `active` の清掃員だけ。操作:load / ok / cant / start / done / confirm(先月以前の明細書)/ upload_url(`receipts/{清掃員ID}/uuid.jpg` への署名付き URL)/ expense(写真は本人のフォルダのものだけ、差し戻し・未確認なら出し直し可)。load は他の清掃員の金額を返さない。オーナーへの通知は `_shared/actions.ts`(LINE ボタンと同じ文面)。
+- Edge Function `line-setup`(合言葉 `x-dispatch-key` = `cleaning_dispatch.key`):`{action:'richmenu'}` で5言語のメニューを作り直し(画像は `test/img/richmenu-{lang}.png`、既定は日本語、id は `line_richmenus`、古いメニューは削除)、`link`(1人)、`link_all`。配置時は `_shared/line.ts` の必要部分だけを一緒にアップロードした。
+- トリガー `cleaners_link_richmenu`:清掃員の LINE 連携や言語が変わると、その人の言語のメニューにつなぐ(`cleaning_dispatch.setup_url`)。マイグレーション `20261125_line_richmenus.sql`。
+- メニュー画像は `tools/make_richmenu.py`(ヘッドレス Chrome で描画。タイ語・ネパール語の文字を正しく組むため)。
+- 既定メニュー(日本語)はオーナーにも出る。オーナーだけの LINE で開くと「登録されていません」と表示される。
+- 動作確認用:`node --experimental-strip-types tools/linetest/run_staff.mjs`、`tools/check_staff.py`(画面)。
+- 未対応:`line-webhook` のボタン処理はまだ `_shared/actions.ts` に寄せていない(同じ内容を2か所に持っている)。
+- 本番に移すとき:本番用の LIFF(または同じ LIFF のエンドポイントを本番の staff.html に)、`cleaning_dispatch.setup_url`、本番の公式アカウントで `line-setup {action:'richmenu'}` を実行、メニューの URL を本番の LIFF に。
 
 ### 2026-11-20 ログインの注意
 - 新規登録が無効のため、招待メールを期限内(24時間)に開かなかったアカウントは「Waiting for verification」のまま残り、「Send confirmation email」もログイン用メールも「Signups not allowed」で断られる。
