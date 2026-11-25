@@ -1,0 +1,15 @@
+-- 毎時の自動処理(cleaning_sync)に「LINE でまだ届いていない返事待ちの依頼を送る」を追加(試験用 Lazurite Test に適用済み 2026-11-25)
+-- 対象:LINE を連携している清掃員の、今日以降で返事待ち(wait)の依頼のうち、request / remind / change が一度も送れていない(または送信待ちでもない)もの
+-- 全文は Supabase の関数 public.cleaning_sync() を参照。追加部分:
+--   with miss as (
+--     select a.reservation_id, a.cleaner_id, a.job_date, r.property_id
+--     from cleaning_assignments a
+--     join cleaners c on c.id = a.cleaner_id and c.line_user_id is not null
+--     join reservations r on r.id = a.reservation_id
+--     where a.status = 'wait' and a.job_date >= today
+--       and not exists (select 1 from cleaning_messages m
+--                       where m.reservation_id = a.reservation_id and m.cleaner_id = a.cleaner_id
+--                         and m.kind in ('request','remind','change')
+--                         and (m.send_status = 'sent' or m.delivered_at is null))
+--   ) insert into cleaning_messages(...) select 'cleaner', ..., 'request', '... の清掃依頼(LINE 未送信分)' from miss ...
+-- 戻り値に line_catchup(件数)を追加。
