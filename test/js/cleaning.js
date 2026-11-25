@@ -21,6 +21,38 @@
   const FROM = PAY_MONTHS[PAY_MONTHS.length - 1] + '-01';
   const LANG_JA = { ja: '日本語', en: '英語', th: 'タイ語', ne: 'ネパール語', vi: 'ベトナム語' };
 
+  // ---------- staff mode: the cleaner screen inside LINE (staff.html). Data goes through the staff-api Edge Function ----------
+  const STAFF = window.LZ_STAFF || null;
+  async function staffApi(action, body) {
+    const token = window.liff && liff.getIDToken();
+    const r = await fetch(cfg.supabaseUrl + '/functions/v1/staff-api', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-line-id-token': token || '' },
+      body: JSON.stringify(Object.assign({ action }, body || {})),
+    });
+    if (r.status === 401) { liff.login({ redirectUri: location.href }); throw new Error('login again'); } // the LINE login has expired
+    const data = await r.json().catch(() => ({}));
+    return { status: r.status, ...data };
+  }
+  function staffState(d) {
+    return { cleaners: d.cleaners, props: d.props, jobs: d.jobs, guide: d.guide, expenses: d.expenses, confirms: d.confirms,
+      log: [], notices: [], rule: { replyDays: 2, horizon: 30 }, myLine: {} };
+  }
+  async function staffReload() {
+    const r = await staffApi('load');
+    if (!r.ok) throw new Error('load ' + r.status);
+    S = staffState(r.data); loadedAt = Date.now(); render();
+  }
+  // a cleaner action: the screen already shows the change; the server records it, tells the owners, then we reload
+  function staffDo(action, body) {
+    if (!STAFF) return;
+    setSave('saving');
+    saving = saving.then(async () => {
+      const r = await staffApi(action, body);
+      await staffReload();
+      setSave(r.ok ? 'saved' : r.code === 'onlyToday' ? 'onlyToday' : 'refused');
+    }).catch(e => { console.error(e); setSave('error'); });
+  }
+
   // ---------- app menu at the top right (same as the board) ----------
   (function appsMenu() {
     const btn = document.getElementById('apps-btn'), panel = document.getElementById('apps-panel');
@@ -133,6 +165,7 @@
   function setSave(state) {
     const s0 = document.getElementById('save'); if (!s0) return;
     s0.className = state === 'error' ? 'err' : '';
+    if (STAFF) { s0.textContent = state ? t('st_' + state) : ''; return; }
     s0.textContent = state === 'saving' ? '保存中…' : state === 'saved' ? '✓ 保存しました' : state === 'error' ? '保存できませんでした。ページを読み込み直してください。' : '';
   }
   function persist() {
@@ -202,9 +235,18 @@
       const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
       cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
       const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82));
-      const path = folder + '/' + crypto.randomUUID() + '.jpg';
-      const { error } = await sb.storage.from('cleaning').upload(path, blob, { contentType: 'image/jpeg' });
-      if (error) throw error;
+      let path;
+      if (STAFF) {
+        const u = await staffApi('upload_url');
+        if (!u.ok) throw new Error('upload_url');
+        const put = await fetch(u.url, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        if (!put.ok) throw new Error('upload ' + put.status);
+        path = u.path;
+      } else {
+        path = folder + '/' + crypto.randomUUID() + '.jpg';
+        const { error } = await sb.storage.from('cleaning').upload(path, blob, { contentType: 'image/jpeg' });
+        if (error) throw error;
+      }
       setSave('saved');
       return { path, url: URL.createObjectURL(blob) };
     } catch (e) { console.error(e); setSave('error'); return null; }
@@ -244,6 +286,14 @@
   };
   Object.keys(T5).forEach(k => Object.assign(T[k], T5[k]));
   Object.keys(T6).forEach(k => { T[k].adjusted = T6[k]; });
+  const T7 = {
+    ja: { st_saving: '送信しています…', st_saved: '✓ 記録しました', st_error: '送れませんでした。通信を確かめて、もう一度押してください。', st_refused: 'この操作はできませんでした。最新の内容を表示しています。', st_onlyToday: '「清掃を始める」は清掃の当日に押せます。' },
+    en: { st_saving: 'Sending…', st_saved: '✓ Saved', st_error: 'Could not send. Check your connection and try again.', st_refused: 'This could not be done. Showing the latest information.', st_onlyToday: 'You can press "Start cleaning" on the cleaning day.' },
+    th: { st_saving: 'กำลังส่ง…', st_saved: '✓ บันทึกแล้ว', st_error: 'ส่งไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง', st_refused: 'ทำรายการนี้ไม่ได้ กำลังแสดงข้อมูลล่าสุด', st_onlyToday: 'กด "เริ่มทำความสะอาด" ได้ในวันทำความสะอาด' },
+    ne: { st_saving: 'पठाउँदै…', st_saved: '✓ रेकर्ड भयो', st_error: 'पठाउन सकिएन। इन्टरनेट जाँचेर फेरि प्रयास गर्नुहोस्।', st_refused: 'यो काम गर्न सकिएन। नयाँ जानकारी देखाउँदैछ।', st_onlyToday: '"सरसफाइ सुरु" सरसफाइको दिन मात्र थिच्न सकिन्छ।' },
+    vi: { st_saving: 'Đang gửi…', st_saved: '✓ Đã lưu', st_error: 'Không gửi được. Hãy kiểm tra kết nối và thử lại.', st_refused: 'Không thể thực hiện. Đang hiển thị thông tin mới nhất.', st_onlyToday: 'Chỉ bấm "Bắt đầu dọn" được vào ngày dọn.' },
+  };
+  Object.keys(T7).forEach(k => Object.assign(T[k], T7[k]));
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
   const monthName = (m, lang) => { try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { year: 'numeric', month: 'long', calendar: 'gregory' }).format(new Date(m + '-15T00:00:00')); } catch (e) { return m; } };
 
@@ -437,14 +487,14 @@
     }
     if (a.st === 'ok') {
       const b = el('button', 'btn big-start', t('start')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
-      b.onclick = () => { a.start = nowHM(); a.st = 'work'; const lm = lateMin(a); notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を開始しました' + (lm > 0 ? '(予定より' + lm + '分遅れ)' : '')); render(); };
+      b.onclick = () => { staffDo('start', { r: j.id }); a.start = nowHM(); a.st = 'work'; const lm = lateMin(a); notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を開始しました' + (lm > 0 ? '(予定より' + lm + '分遅れ)' : '')); render(); };
       c.append(b);
       if (j.date > TODAY) { b.disabled = true; c.append(el('div', 'log', t('onDay'))); }
     }
     if (a.st === 'work') {
       c.append(logLine(a));
       const b = el('button', 'btn big-ok', t('finish')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
-      b.onclick = () => { a.end = nowHM(); a.st = 'done'; notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を完了しました(開始 ' + a.start + ' → 完了 ' + a.end + ')'); render(); };
+      b.onclick = () => { staffDo('done', { r: j.id }); a.end = nowHM(); a.st = 'done'; notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を完了しました(開始 ' + a.start + ' → 完了 ' + a.end + ')'); render(); };
       c.append(b);
     }
     if (a.st === 'done') c.append(logLine(a));
@@ -477,7 +527,7 @@
       const row = el('div', 'row');
       const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const ok = el('button', 'btn big-ok', t('confirm')); ok.type = 'button'; ok.disabled = !chosen;
-      ok.onclick = () => { a.plan = chosen; a.st = 'ok'; notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' にOKの返事をしました(' + chosen + ' から入る予定)'); UI.sheet = null; render(); };
+      ok.onclick = () => { staffDo('ok', { r: j.id, t: chosen }); a.plan = chosen; a.st = 'ok'; notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' にOKの返事をしました(' + chosen + ' から入る予定)'); UI.sheet = null; render(); };
       row.append(cancel, ok); sh.append(row);
       bg.append(sh); return bg;
     };
@@ -492,7 +542,7 @@
       const row = el('div', 'row');
       const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const yes = el('button', 'btn', t('yes')); yes.type = 'button'; yes.style.background = 'var(--bad)'; yes.style.borderColor = 'var(--bad)';
-      yes.onclick = () => { a.st = 'cant'; delete a.plan; notify(cl(UI.who).name + ' さんから ' + jaDate(j.date) + ' ' + j.prop + ' に「行けない」と返事がありました', 'cant'); UI.sheet = null; render(); };
+      yes.onclick = () => { staffDo('cant', { r: j.id }); a.st = 'cant'; delete a.plan; notify(cl(UI.who).name + ' さんから ' + jaDate(j.date) + ' ' + j.prop + ' に「行けない」と返事がありました', 'cant'); UI.sheet = null; render(); };
       row.append(cancel, yes); sh.append(row); bg.append(sh); return bg;
     };
     render();
@@ -1046,7 +1096,7 @@
 
   // ---------- shared: log, receipt sample, view mode ----------
   const stamp = () => { const d = new Date(); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
-  const addLog = (cid, who, text) => { const at = stamp(); S.log.push({ cid, at, who, text }); sb.from('cleaning_log').insert({ cleaner_id: cid, at, who, body: text }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } }); };
+  const addLog = (cid, who, text) => { const at = stamp(); S.log.push({ cid, at, who, text }); if (STAFF) return; sb.from('cleaning_log').insert({ cleaner_id: cid, at, who, body: text }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } }); };
   // messages for cleaners (sent by LINE from the database). Queued after the pending save so the request exists first.
   function toCleaners(rows) {
     if (!rows.length) return;
@@ -1056,7 +1106,7 @@
     });
   }
   // message the owner would receive (LINE in production)
-  const notify = (text, kind) => { S.notices.unshift({ at: stamp(), text, kind, fresh: true }); sb.from('cleaning_messages').insert({ audience: 'owner', kind: kind || 'info', body: text }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } }); };
+  const notify = (text, kind) => { if (STAFF) return; S.notices.unshift({ at: stamp(), text, kind, fresh: true }); sb.from('cleaning_messages').insert({ audience: 'owner', kind: kind || 'info', body: text }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } }); };
   function noticePanel() {
     const fresh = S.notices.filter(n => n.fresh).length;
     const box = el('div', 'card ntc');
@@ -1191,7 +1241,7 @@
     const cb = el('div', 'card confirm-box');
     if (S.confirms[key]) cb.append(el('div', 'confirmed', '✓ ' + t('confirmedAt') + ' ' + S.confirms[key]));
     else if (month >= THIS_MONTH) cb.append(el('div', 'note', t('confirmLater')));
-    else if (fee + reimb > 0) { const b = el('button', 'btn', t('confirmBtn')); b.type = 'button'; b.onclick = () => { S.confirms[key] = stamp(); addLog(UI.who, cl(UI.who).name, Number(month.slice(5)) + '月分の明細の内容を確認'); render(); }; cb.append(b); }
+    else if (fee + reimb > 0) { const b = el('button', 'btn', t('confirmBtn')); b.type = 'button'; b.onclick = () => { staffDo('confirm', { month }); S.confirms[key] = stamp(); addLog(UI.who, cl(UI.who).name, Number(month.slice(5)) + '月分の明細の内容を確認'); render(); }; cb.append(b); }
     else cb.hidden = true;
     const eh = el('div', 'sec-title', t('expTitle'));
     const add = el('button', 'btn ghost', '+ ' + t('addExp')); add.type = 'button'; add.onclick = () => openExpense(null);
@@ -1264,6 +1314,7 @@
       go.onclick = () => {
         const amt = Number(d.amount);
         if (!d.photo || !(amt > 0)) { err = t('needPhoto'); render(); return; }
+        staffDo('expense', { id: existing ? existing.id : null, date: d.date, amount: Math.round(amt), item: d.item, prop_id: prop(d.prop) ? prop(d.prop).id : null, photo_path: d.photoPath });
         if (existing) { Object.assign(existing, { ...d, amount: amt, status: 'pending', reason: '' }); addLog(UI.who, cl(UI.who).name, '立替を修正して再提出(' + yen(amt) + ')'); }
         else { S.expenses.push({ id: crypto.randomUUID(), c: UI.who, ...d, amount: amt, status: 'pending', invoiceNo: '', taxRate: '10' }); addLog(UI.who, cl(UI.who).name, '立替を登録(' + yen(amt) + (d.item ? ' ' + d.item : '') + ')'); }
         UI.sheet = null; render();
@@ -1481,5 +1532,29 @@
     document.addEventListener('change', () => persist()); // fields that do not redraw the screen
     document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - loadedAt > 60000) saving = saving.then(reload).catch(e => console.error(e)); });
   }
-  boot();
+  const NOT_LINKED = {
+    ja: 'この LINE はまだ清掃員として登録されていません。オーナーから受け取った6桁のコードを、公式アカウントのトークに送ってください。',
+    en: 'This LINE is not registered as a cleaner yet. Please send the 6-digit code from the owner to the official account chat.',
+    th: 'LINE นี้ยังไม่ได้ลงทะเบียนเป็นพนักงานทำความสะอาด กรุณาส่งรหัส 6 หลักจากเจ้าของมาในแชทของบัญชีทางการ',
+    ne: 'यो LINE अझै सरसफाइ कर्मचारीको रूपमा दर्ता भएको छैन। मालिकबाट पाएको ६ अंकको कोड अफिसियल खाताको च्याटमा पठाउनुहोस्।',
+    vi: 'LINE này chưa được đăng ký là nhân viên dọn dẹp. Vui lòng gửi mã 6 số từ chủ nhà vào khung chat của tài khoản chính thức.',
+  };
+  async function bootStaff() {
+    const fail = (msg) => { $('loading').hidden = true; $('gate').hidden = false; $('gate-msg').textContent = msg; };
+    try { await liff.init({ liffId: STAFF.liffId }); } catch (e) { console.error(e); fail('LINE の画面を開けませんでした。/ Could not open in LINE.'); return; }
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+    let r;
+    try { r = await staffApi('load'); } catch (e) { console.error(e); fail('読み込めませんでした。/ Could not load. Please try again.'); return; }
+    if (r.status === 403) { fail(Object.values(NOT_LINKED).join('\n\n')); return; }
+    if (!r.ok) { fail('読み込めませんでした。/ Could not load. Please try again.'); return; }
+    S = staffState(r.data); loadedAt = Date.now();
+    UI.view = 'cleaner'; UI.who = r.data.me.id; UI.lang = r.data.me.lang;
+    UI.modeC = loadMode('C');
+    const want = new URLSearchParams(location.search).get('tab');
+    if (['today', 'jobs', 'guide', 'pay'].includes(want)) { UI.ctab = want; UI.payM = THIS_MONTH; } else cleanerStartTab();
+    $('loading').hidden = true; $('wrap').hidden = false;
+    render();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && !UI.sheet && Date.now() - loadedAt > 60000) saving = saving.then(staffReload).catch(e => console.error(e)); });
+  }
+  if (STAFF) bootStaff(); else boot();
 })();

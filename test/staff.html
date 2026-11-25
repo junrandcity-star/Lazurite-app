@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Lazurite 清掃(試験)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Noto+Sans+Thai:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/cleaning.css?v=202611251400">
+<style>
+  /* the cleaner screen only, full width inside LINE */
+  .staff-top { display: flex; justify-content: flex-end; min-height: 1.4em; padding: 6px 16px 0; font-size: .8rem; color: var(--muted); }
+  #save.err { color: var(--bad); }
+  .gate { white-space: pre-line; text-align: left; }
+</style>
+</head>
+<body>
+<div class="test-banner" role="note">TEST / 試験</div>
+
+<div class="wrap" id="loading"><p class="empty">…</p></div>
+
+<div class="wrap" id="gate" hidden>
+  <div class="card gate"><p id="gate-msg"></p></div>
+</div>
+
+<div class="wrap" id="wrap" hidden>
+  <div class="staff-top"><span id="save" role="status"></span></div>
+  <!-- the owner's controls exist only so the shared script can find them -->
+  <div hidden>
+    <button type="button" id="v-owner"></button><button type="button" id="v-cleaner"></button>
+    <label id="who-wrap"><select id="who"></select></label>
+  </div>
+  <main id="app"></main>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="js/config.js?v=202611251400"></script>
+<script>window.LZ_STAFF = { liffId: '2012785420-TTEQZ4p7' };</script>
+<script src="js/cleaning.js?v=202611251400"></script>
+</body>
+</html>

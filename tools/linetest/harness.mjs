@@ -22,8 +22,8 @@ export const DB = {
   properties: [{ id: 1, name: 'Laughter' }, { id: 2, name: 'Pear Field' }],
   property_cleaning: [{ property_id: 1, out_time: '10:00', in_time: '16:00' }, { property_id: 2, out_time: '11:00', in_time: '15:00' }],
   cleaners: [
-    { id: C1, name: 'Anan', lang: 'th', line_user_id: 'U_anan', line_code: null },
-    { id: C2, name: '佐藤', lang: 'ja', line_user_id: null, line_code: '123456' },
+    { id: C1, name: 'Anan', lang: 'th', line_user_id: 'U_anan', line_code: null, active: true },
+    { id: C2, name: '佐藤', lang: 'ja', line_user_id: null, line_code: '123456', active: true },
   ],
   owner_line: [{ user_id: 'o1', line_user_id: 'U_owner1' }, { user_id: 'o2', line_user_id: 'U_owner2' }],
   cleaning_assignments: [
@@ -33,6 +33,11 @@ export const DB = {
   ],
   cleaning_messages: [],
   cleaning_dispatch: [{ id: 1, key: 'K', url: 'x' }],
+  property_cleaners: [{ property_id: 1, cleaner_id: C1 }, { property_id: 2, cleaner_id: C1 }],
+  guide_areas: [{ id: 'g1', property_id: 1, sort: 0, name: { ja: 'ベッド', th: 'เตียง' }, notes: [{ ja: 'シーツ', th: 'ผ้าปู' }], photo_path: 'guide/a.jpg' }],
+  cleaning_expenses: [{ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', cleaner_id: C1, property_id: 1, purchased_on: today, amount: 500, store: '', item: '洗剤', status: 'returned', reason: 'レシートが見えません', photo_path: 'receipts/' + C1 + '/x.jpg', created_at: '1' }],
+  pay_confirms: [],
+  cleaning_log: [],
 };
 export const LINE = [];
 let msgId = 0;
@@ -50,6 +55,7 @@ function parse(qs) {
       if (op === 'neq') return x !== val;
       if (op === 'gte') return x != null && x >= val;
       if (op === 'not' && val === 'is.null') return x != null;
+      if (op === 'in') return val.slice(1, -1).split(',').map(decodeURIComponent).includes(x);
       throw new Error('op ' + op);
     });
   }
@@ -57,9 +63,16 @@ function parse(qs) {
 }
 globalThis.fetch = async (url, init = {}) => {
   const u = new URL(url); const method = init.method || 'GET';
-  const body = init.body ? JSON.parse(init.body) : null;
+  let body = null; if (init.body && typeof init.body === 'string') { try { body = JSON.parse(init.body); } catch (_) { body = null; } }
   const ok = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+  if (u.origin === 'https://api.line.me' && u.pathname === '/oauth2/v2.1/verify') {
+    const f = new URLSearchParams(String(init.body)); const tok = f.get('id_token');
+    if (f.get('client_id') !== '2012785420' || !tok.startsWith('idtok:')) return ok({ error: 'invalid' }, 400);
+    return ok({ sub: tok.slice(6) });
+  }
   if (u.origin === 'https://api.line.me') { LINE.push({ path: u.pathname.split('/').pop(), body }); return ok({}); }
+  if (u.origin === SB && u.pathname.startsWith('/storage/v1/object/upload/sign/')) return ok({ url: u.pathname.replace('/storage/v1', '') + '?token=T' });
+  if (u.origin === SB && u.pathname === '/storage/v1/object/sign/cleaning') return ok(body.paths.map((x) => ({ path: x, signedURL: '/object/sign/cleaning/' + x + '?token=S' })));
   if (u.origin !== SB) throw new Error('unexpected ' + url);
   if (u.pathname === '/rest/v1/rpc/cleaning_claim_messages') {
     const out = DB.cleaning_messages.filter((m) => !m.delivered_at).slice(0, body.lim);
@@ -86,7 +99,13 @@ let pendingDispatch = false;
 
 await import(pathToFileURL(FN + 'line-webhook/index.ts').href);
 await import(pathToFileURL(FN + 'line-send/index.ts').href);
-const [webhook, send] = handlers;
+await import(pathToFileURL(FN + 'staff-api/index.ts').href);
+const [webhook, send, staff] = handlers;
+export async function api(token, body) {
+  const r = await staff(new Request('https://x/staff-api', { method: 'POST', body: JSON.stringify(body), headers: { 'x-line-id-token': token, Origin: 'https://junrandcity-star.github.io' } }));
+  if (pendingDispatch) await dispatch();
+  return { status: r.status, body: await r.json() };
+}
 
 export async function dispatch() {
   pendingDispatch = false;

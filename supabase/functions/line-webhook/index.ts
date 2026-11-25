@@ -18,11 +18,11 @@ const MSG: Record<string, Record<Lang, string>> = {
     vi: "Đây là kênh liên lạc dọn dẹp của Lazurite. Cảm ơn bạn đã kết bạn.\nVui lòng gửi mã 6 số bạn nhận được từ chủ nhà.",
   },
   linked: {
-    ja: "連携できました。清掃の依頼やお知らせは、このLINEに届きます。",
-    en: "You're connected. Cleaning requests and notices will come to this LINE.",
-    th: "เชื่อมต่อเรียบร้อยแล้ว คำขอและการแจ้งเตือนงานทำความสะอาดจะส่งมาที่ LINE นี้",
-    ne: "जडान भयो। सरसफाइका अनुरोध र सूचना यही LINE मा आउनेछन्।",
-    vi: "Đã kết nối. Yêu cầu và thông báo dọn dẹp sẽ được gửi tới LINE này.",
+    ja: "連携できました。清掃の依頼やお知らせは、このLINEに届きます。\n画面下のメニューから、本日の清掃・予定・ガイド・お給料を見られます。",
+    en: "You're connected. Cleaning requests and notices will come to this LINE.\nUse the menu at the bottom to see today's jobs, your schedule, the guide and your pay.",
+    th: "เชื่อมต่อเรียบร้อยแล้ว คำขอและการแจ้งเตือนงานทำความสะอาดจะส่งมาที่ LINE นี้\nดูงานวันนี้ ตารางงาน คู่มือ และค่าจ้างได้จากเมนูด้านล่าง",
+    ne: "जडान भयो। सरसफाइका अनुरोध र सूचना यही LINE मा आउनेछन्।\nतलको मेनुबाट आजको काम, तालिका, निर्देशिका र तलब हेर्न सकिन्छ।",
+    vi: "Đã kết nối. Yêu cầu và thông báo dọn dẹp sẽ được gửi tới LINE này.\nDùng menu bên dưới để xem lịch hôm nay, lịch làm việc, hướng dẫn và tiền lương.",
   },
   notFound: {
     ja: "このコードは見つかりませんでした。数字をもう一度確かめて送ってください。",
