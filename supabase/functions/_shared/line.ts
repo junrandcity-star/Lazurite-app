@@ -33,6 +33,9 @@ export const T: Record<string, Record<Lang, string>> = {
   gotStart: { ja: "開始を記録しました({t})。終わったら下のボタンを押してください。", en: "Start recorded ({t}). Press the button below when you finish.", th: "บันทึกเวลาเริ่มแล้ว ({t}) เมื่อเสร็จแล้วกรุณากดปุ่มด้านล่าง", ne: "सुरु रेकर्ड भयो ({t})। सकिएपछि तलको बटन थिच्नुहोस्।", vi: "Đã ghi nhận bắt đầu ({t}). Khi xong, hãy bấm nút bên dưới." },
   gotDone: { ja: "お疲れさまでした。完了を記録しました({t})。", en: "Thank you! Finished at {t}.", th: "ขอบคุณ บันทึกว่าเสร็จแล้ว ({t})", ne: "धन्यवाद! {t} मा सकिएको रेकर्ड भयो।", vi: "Cảm ơn bạn! Đã ghi nhận hoàn thành ({t})." },
   onlyToday: { ja: "「清掃を始める」は清掃の当日に押せます。", en: "You can press \"Start cleaning\" on the cleaning day.", th: "กด \"เริ่มทำความสะอาด\" ได้ในวันทำความสะอาด", ne: "\"सरसफाइ सुरु\" सरसफाइको दिन मात्र थिच्न सकिन्छ।", vi: "Chỉ bấm \"Bắt đầu dọn\" được vào ngày dọn." },
+  tomorrowTitle: { ja: "明日の清掃", en: "Tomorrow's cleaning", th: "งานทำความสะอาดพรุ่งนี้", ne: "भोलिको सरसफाइ", vi: "Lịch dọn ngày mai" },
+  tomorrowText: { ja: "明日はよろしくお願いします。行けなくなったときは、下のボタンを押してください。", en: "Thank you for tomorrow. If you can no longer go, press the button below.", th: "ขอบคุณสำหรับพรุ่งนี้ ถ้าไปไม่ได้แล้ว กรุณากดปุ่มด้านล่าง", ne: "भोलिको लागि धन्यवाद। आउन नसक्ने भएमा तलको बटन थिच्नुहोस्।", vi: "Cảm ơn bạn cho ngày mai. Nếu không đi được nữa, hãy bấm nút bên dưới." },
+  urgentCall: { ja: "今日の清掃です。LINE の電話で、すぐにオーナーに知らせてください。", en: "This cleaning is today. Please call the owner on LINE right away.", th: "งานนี้คือวันนี้ กรุณาโทรหาเจ้าของทาง LINE ทันที", ne: "यो सरसफाइ आजै हो। कृपया तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।", vi: "Lịch dọn này là hôm nay. Hãy gọi ngay cho chủ nhà qua LINE." },
   gone: { ja: "この依頼は変更または取り消されています。", en: "This request has been changed or cancelled.", th: "คำขอนี้ถูกเปลี่ยนหรือยกเลิกแล้ว", ne: "यो अनुरोध परिवर्तन वा रद्द भइसकेको छ।", vi: "Yêu cầu này đã được thay đổi hoặc hủy." },
   already: { ja: "この清掃はすでに完了しています。", en: "This cleaning is already finished.", th: "งานนี้เสร็จเรียบร้อยแล้ว", ne: "यो सरसफाइ पहिले नै सकिएको छ।", vi: "Lịch dọn này đã hoàn thành." },
 };
@@ -49,10 +52,10 @@ export const dateLabel = (ymd: string, lang: Lang) =>
 export const jaDate = (ymd: string) => dateLabel(ymd, "ja");
 const mins = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 const hm = (m: number) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
-// same choices as the app: from check-out until 2 hours before check-in, every 30 minutes
-export function timeChoices(outTime: string, inTime: string) {
+// same choices as the app: from check-out until "check-in minus the cleaning time of the property", every 30 minutes
+export function timeChoices(outTime: string, inTime: string, durMin = 120) {
   const out: string[] = [];
-  for (let m = mins(outTime); m <= mins(inTime) - 120 && out.length < 13; m += 30) out.push(hm(m));
+  for (let m = mins(outTime); m <= mins(inTime) - durMin && out.length < 13; m += 30) out.push(hm(m));
   return out.length ? out : [outTime];
 }
 export const lateMinutes = (plan: string | null, at: string) => (plan ? mins(at) - mins(plan) : 0);
@@ -78,7 +81,7 @@ export async function rpc(name: string, args: Record<string, unknown> = {}) {
 }
 
 export type Job = {
-  reservationId: number; date: string | null; prop: string; out: string; inT: string;
+  reservationId: number; date: string | null; prop: string; out: string; inT: string; dur: number;
   nextIn: string | null; nextGuests: number | null;
   asg: { cleaner_id: string; status: string; plan_time: string | null; start_time: string | null; job_date: string } | null;
 };
@@ -87,14 +90,14 @@ export async function loadJob(reservationId: number, cleanerId: string): Promise
   if (!r.length) return null;
   const [p, pc, a] = await Promise.all([
     db("properties?id=eq." + r[0].property_id + "&select=name"),
-    db("property_cleaning?property_id=eq." + r[0].property_id + "&select=out_time,in_time"),
+    db("property_cleaning?property_id=eq." + r[0].property_id + "&select=out_time,in_time,duration_min"),
     db("cleaning_assignments?reservation_id=eq." + reservationId + "&cleaner_id=eq." + cleanerId + "&select=cleaner_id,status,plan_time,start_time,job_date"),
   ]);
   const date: string | null = a[0]?.job_date ?? r[0].check_out ?? null;
   let next: Array<{ check_in: string; guests: number | null }> = [];
   if (date) next = await db("reservations?property_id=eq." + r[0].property_id + "&status=eq.confirmed&check_in=gte." + date + "&id=neq." + reservationId + "&order=check_in.asc&limit=1&select=check_in,guests");
   return {
-    reservationId, date, prop: p[0]?.name ?? "", out: pc[0]?.out_time ?? "10:00", inT: pc[0]?.in_time ?? "16:00",
+    reservationId, date, prop: p[0]?.name ?? "", out: pc[0]?.out_time ?? "10:00", inT: pc[0]?.in_time ?? "16:00", dur: pc[0]?.duration_min ?? 120,
     nextIn: next[0]?.check_in ?? null, nextGuests: next[0]?.guests ?? null, asg: a[0] ?? null,
   };
 }

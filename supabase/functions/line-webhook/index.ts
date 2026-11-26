@@ -5,6 +5,7 @@
 // - 清掃員がボタンを押したら(OK・時間/行けない/清掃を始める/清掃が終わった)、アプリに記録してオーナーに知らせる
 // Secrets: LINE_CHANNEL_SECRET(署名の確認用)、LINE_CHANNEL_ACCESS_TOKEN(返信用)
 // LINE からの呼び出しなので verify_jwt は false。代わりに署名(X-Line-Signature)を確認する。
+import { cantText } from "../_shared/actions.ts";
 import { asLang, bubble, dateLabel, db, jaDate, lateMinutes, lineApi, LINE_TOKEN, loadJob, nowJST, pb, timeChoices, tr, type Lang } from "../_shared/line.ts";
 
 const SECRET = Deno.env.get("LINE_CHANNEL_SECRET") ?? "";
@@ -94,7 +95,7 @@ async function onPostback(token: string, lineUserId: string, data: string) {
 
   if (a === "ok") {
     if (!["wait", "ok", "cant"].includes(st) || j.date < now.date) return reply(token, [text(tr("gone", lang))]);
-    const choices = timeChoices(j.out, j.inT);
+    const choices = timeChoices(j.out, j.inT, j.dur);
     if (!t) {
       const items = choices.map((v) => ({ type: "action", action: { type: "postback", label: v, data: pb("ok", r, cId, "&t=" + v), displayText: v } }));
       return reply(token, [{ type: "text", text: tr("pickTime", lang), quickReply: { items } }]);
@@ -113,8 +114,9 @@ async function onPostback(token: string, lineUserId: string, data: string) {
   if (a === "cant") {
     if (!["wait", "ok"].includes(st) || j.date < now.date) return reply(token, [text(tr("gone", lang))]);
     if (!(await patch({ status: "cant", plan_time: null })).length) return reply(token, [text(tr("gone", lang))]);
-    await toOwners("【要対応】" + who + "が " + where + " に行けません。代わりの手配をお願いします。", "cant", r, cId);
-    return reply(token, [text(tr("gotCant", lang))]);
+    const sameDay = j.date === now.date;
+    await toOwners(cantText(who, where, sameDay), "cant", r, cId);
+    return reply(token, [text(tr("gotCant", lang) + (sameDay ? "\n" + tr("urgentCall", lang) : ""))]);
   }
   const doneButton = () => bubble(tr("todayTitle", lang), [dateLabel(j.date!, lang) + " " + j.prop, tr("gotStart", lang, { t: j.asg!.start_time ?? now.hm })],
     [{ label: tr("btnDone", lang), data: pb("done", r, cId), primary: true }]);
@@ -154,6 +156,11 @@ Deno.serve(async (req: Request) => {
         await reply(ev.replyToken, [text(allLangs("hello"))]);
       } else if (ev.type === "unfollow") {
         const u = encodeURIComponent(uid);
+        const gone = await db("cleaners?line_user_id=eq." + u + "&active=eq.true&select=id,name");
+        for (const c of gone) {
+          await db("cleaning_messages", "POST", { audience: "owner", kind: "unlinked", cleaner_id: c.id,
+            body: "【連携解除】" + c.name + " さんが LINE 公式アカウントをブロック(または削除)したため、LINE の連携が外れました。依頼が LINE で届きません。もう一度連携するには、設定 → 清掃員 で連携コードを作って送ってください。" });
+        }
         await db("cleaners?line_user_id=eq." + u, "PATCH", { line_user_id: null, line_linked_at: null });
         await db("owner_line?line_user_id=eq." + u, "PATCH", { line_user_id: null, line_linked_at: null });
       } else if (ev.type === "postback") {

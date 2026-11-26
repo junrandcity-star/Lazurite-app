@@ -26,7 +26,7 @@ check(owner && owner.body.to.length === 2, 'owner multicast to 2');
 await H.postback('U_anan', 'a=ok&r=1&c=' + C1);
 const qr = H.lastLine().body.messages[0];
 console.log(' time choices:', qr.quickReply.items.map((i) => i.action.label).join(','));
-check(qr.quickReply.items.length === 9, '9 choices 10:00..14:00');
+check(qr.quickReply.items.length === 7 && qr.quickReply.items[6].action.label === '13:00', '7 choices 10:00..13:00 (check-in 16:00 minus 3 hours of cleaning)');
 await H.postback('U_anan', 'a=ok&r=1&c=' + C1 + '&t=10:30');
 show(' ok reply');
 check(asg(1, C1).status === 'ok' && asg(1, C1).plan_time === '10:30', 'saved ok 10:30');
@@ -88,4 +88,18 @@ for (const lang of ['ja', 'en', 'ne', 'vi']) {
   DB.cleaning_messages.push({ id: 200 + LINE.length, audience: 'cleaner', cleaner_id: C1, reservation_id: 1, kind: 'request', body: 'x', delivered_at: null });
   await H.dispatch(); show(' request(' + lang + ')');
 }
+
+// 10. 18:00 the day before: "tomorrow" with a can't-go button (only for accepted jobs)
+DB.cleaners[0].lang = 'ja'; asg(1, C1).status = 'ok'; asg(1, C1).plan_time = '10:30';
+DB.cleaning_messages.push({ id: 400, audience: 'cleaner', cleaner_id: C1, reservation_id: 1, kind: 'tomorrow', body: 'x', delivered_at: null });
+await H.dispatch(); show(' tomorrow');
+check(JSON.stringify(H.lastLine().body).includes('a=cant&r=1'), 'tomorrow has the cant button');
+asg(1, C1).status = 'wait';
+DB.cleaning_messages.push({ id: 401, audience: 'cleaner', cleaner_id: C1, reservation_id: 1, kind: 'tomorrow', body: 'x', delivered_at: null });
+await H.dispatch(); check(DB.cleaning_messages.find((m) => m.id === 401).send_status === 'stale', 'tomorrow not sent when not accepted');
+
+// 11. a cleaner blocks the account: owners are told
+await H.hook([{ type: 'unfollow', source: { type: 'user', userId: 'U_anan' } }]);
+const ul = DB.cleaning_messages.filter((m) => m.kind === 'unlinked'); console.log(' unlinked:', ul.map((m) => m.body).join());
+check(ul.length === 1 && DB.cleaners[0].line_user_id === null, 'unfollow tells owners and unlinks');
 console.log(fails ? fails + ' FAILED' : 'ALL CHECKS PASSED');

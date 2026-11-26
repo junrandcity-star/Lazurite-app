@@ -39,5 +39,24 @@ r = await H.api(T, { action: 'expense', date: H.today, amount: 1200, item: 'タ�
 r = await H.api(T, { action: 'expense', id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', date: H.today, amount: 600, item: '洗剤', prop_id: 1, photo_path: 'receipts/' + C1 + '/x2.jpg' });
 check(r.body.ok && DB.cleaning_expenses[0].status === 'pending' && DB.cleaning_expenses[0].amount === 600, 'resubmit returned');
 r = await H.api(T, { action: 'expense', date: H.today, amount: -5, prop_id: 1, photo_path: 'receipts/' + C1 + '/n.jpg' }); check(r.body.code === 'bad', 'negative amount');
+// cleaning time of the property: Laughter takes 3 hours, check-in 16:00 -> last start 13:00
+r = await H.api(T, { action: 'ok', r: 1, t: '13:30' }); check(r.body.code === 'badTime', 'start after check-in minus cleaning time refused');
+r = await H.api(T, { action: 'ok', r: 1, t: '13:00' }); check(r.body.ok, 'last start allowed');
+// can't go after OK, on another day / on the cleaning day itself
+DB.cleaning_assignments.push({ reservation_id: 4, cleaner_id: C1, job_date: H.today, status: 'ok', plan_time: '11:00', start_time: null });
+r = await H.api(T, { action: 'cant', r: 4 }); check(r.body.ok, 'cant after ok');
+const urgent = LINE.filter((l) => l.path === 'multicast').pop().body.messages[0].text; console.log(' owner got:', urgent);
+check(urgent.startsWith('【至急・要対応】'), 'same-day cant is urgent');
+// reports
+r = await H.api(T, { action: 'report_url' }); check(r.body.path.startsWith('reports/' + C1 + '/'), 'report photo in own folder');
+const good = 'reports/' + C1 + '/0123abcd-0123-4567-89ab-0123456789ab.jpg';
+r = await H.api(T, { action: 'report', r: 3, body: '浴室の電球が切れています', photos: [good] }); check(r.body.ok && DB.cleaning_reports.length === 1, 'report saved');
+console.log(' owner got:', LINE.filter((l) => l.path === 'multicast').pop().body.messages[0].text.replace(/\n/g, ' / '));
+r = await H.api(T, { action: 'report', r: 3, body: 'x', photos: ['reports/' + C2 + '/0123abcd-0123-4567-89ab-0123456789ab.jpg'] }); check(r.body.code === 'bad', 'cannot use another cleaner\'s photo in a report');
+r = await H.api(T, { action: 'report', r: 2, body: 'x', photos: [] }); check(r.body.code === 'gone', 'cannot report on another cleaner\'s job');
+r = await H.api(T, { action: 'report', r: 1, body: 'x', photos: [] }); check(r.body.code === 'gone', 'cannot report on a future job');
+const L2 = (await H.api(T, { action: 'load' })).body.data;
+check(L2.jobs.find((j) => j.id === 3).reports.length === 1, 'reports come back on load');
+check(L2.props.find((p) => p.name === 'Laughter').dur === 180, 'cleaning time on load');
 console.log('log:', DB.cleaning_log.map((l) => l.body).join(' / '));
 console.log(fails ? fails + ' FAILED' : 'ALL STAFF CHECKS PASSED');

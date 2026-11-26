@@ -1,10 +1,10 @@
 // 清掃員用アプリ(LINE の中で開く画面)の受け口(試験環境 Lazurite Test)
 // - 本人確認:LIFF の ID トークンを LINE に確かめてもらい、LINE の利用者 ID から清掃員を特定する
 // - 返すのは、その清掃員の担当施設・依頼・ガイド・立替・明細確認だけ。清掃員はデータベースに直接触れない
-// - 受け付ける操作:OK(時間)・行けない・開始・完了・明細の確認・立替の登録/再提出・レシート写真の置き場所の発行
+// - 受け付ける操作:OK(時間)・行けない・開始・完了・明細の確認・立替の登録/再提出・レシート写真の置き場所の発行・報告(メモ+写真)
 // Secrets/設定:LINE_LOGIN_CHANNEL_ID(なければ試験用 2012785420)。LINE から来ないので verify_jwt は false
-import { db, nowJST } from "../_shared/line.ts";
-import { cleanerAction } from "../_shared/actions.ts";
+import { db, jaDate, nowJST } from "../_shared/line.ts";
+import { cleanerAction, toOwners } from "../_shared/actions.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -32,6 +32,7 @@ const monthsBack = (m: string, n: number) => {
   return y + "-" + String(mo).padStart(2, "0");
 };
 const inList = (xs: Array<string | number>) => "(" + xs.map((x) => encodeURIComponent(String(x))).join(",") + ")";
+const plusDaysISO = (n: number) => new Date(Date.now() + n * 86400e3).toISOString();
 const stamp = () => { const n = nowJST(); return Number(n.date.slice(5, 7)) + "/" + Number(n.date.slice(8, 10)) + " " + n.hm; };
 const log = (cid: string, who: string, body: string) => db("cleaning_log", "POST", { cleaner_id: cid, at: stamp(), who, body });
 
@@ -56,11 +57,12 @@ async function signedUrls(paths: string[]) {
 async function load(me: Me) {
   const today = nowJST().date;
   const FROM = monthsBack(today.slice(0, 7), 6) + "-01";
-  const [memberRows, mine, exps, confs] = await Promise.all([
+  const [memberRows, mine, exps, confs, reps] = await Promise.all([
     db("property_cleaners?cleaner_id=eq." + me.id + "&select=property_id"),
     db("cleaning_assignments?cleaner_id=eq." + me.id + "&job_date=gte." + FROM + "&select=*"),
     db("cleaning_expenses?cleaner_id=eq." + me.id + "&purchased_on=gte." + FROM + "&order=created_at.asc&select=*"),
     db("pay_confirms?cleaner_id=eq." + me.id + "&select=*"),
+    db("cleaning_reports?cleaner_id=eq." + me.id + "&created_at=gte." + plusDaysISO(-14) + "&order=created_at.asc&select=reservation_id,body,photos,created_at"),
   ]);
   const memberIds: number[] = memberRows.map((x: { property_id: number }) => x.property_id);
   const resIds: number[] = mine.map((a: { reservation_id: number }) => a.reservation_id);
@@ -85,7 +87,8 @@ async function load(me: Me) {
     const co = others.filter((o: { reservation_id: number }) => o.reservation_id === a.reservation_id).map((o: { cleaner_id: string }) => ({ c: o.cleaner_id, st: "other" }));
     return {
       id: a.reservation_id, prop: nameOf[r.property_id], date: a.job_date, nextIn: next ? next.check_in : null, guests: next ? next.guests : null,
-      asg: [{ c: me.id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, fee: a.fee_override, feeNote: a.fee_note }, ...co],
+      asg: [{ c: me.id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, fee: a.fee_override, feeNote: a.fee_note, rateDone: a.rate_at_done }, ...co],
+      reports: reps.filter((x: { reservation_id: number }) => x.reservation_id === a.reservation_id).map((x: { body: string; photos: string[]; created_at: string }) => ({ body: x.body, n: x.photos.length, at: x.created_at })),
     };
   }).sort((x: { date: string; prop: string }, y: { date: string; prop: string }) => x.date.localeCompare(y.date) || x.prop.localeCompare(y.prop));
 
@@ -99,7 +102,7 @@ async function load(me: Me) {
     cleaners: [me, ...otherNames.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name, lang: "ja" }))],
     props: props.map((p: { id: number; name: string }) => {
       const x = pcOf[p.id] ?? {};
-      return { id: p.id, name: p.name, out: x.out_time ?? "10:00", in: x.in_time ?? "16:00", rate: x.rate ?? 0, main: null, members: memberIds.includes(p.id) ? [me.id] : [] };
+      return { id: p.id, name: p.name, out: x.out_time ?? "10:00", in: x.in_time ?? "16:00", dur: x.duration_min ?? 120, rate: x.rate ?? 0, main: null, members: memberIds.includes(p.id) ? [me.id] : [] };
     }),
     jobs,
     guide,
@@ -134,6 +137,29 @@ async function handle(me: Me, action: string, b: Record<string, any>) {
     const path = "receipts/" + me.id + "/" + crypto.randomUUID() + ".jpg";
     const r = await storage("object/upload/sign/cleaning/" + path, {});
     return { ok: true, path, url: SB_URL + "/storage/v1" + r.url };
+  }
+
+  // a report from the cleaning (memo + up to 30 photos). The photos are deleted after 30 days (cleaning-cleanup)
+  if (action === "report_url") {
+    const path = "reports/" + me.id + "/" + crypto.randomUUID() + ".jpg";
+    const r = await storage("object/upload/sign/cleaning/" + path, {});
+    return { ok: true, path, url: SB_URL + "/storage/v1" + r.url };
+  }
+  if (action === "report") {
+    const r = Number(b.r), body = String(b.body ?? "").trim().slice(0, 1000);
+    const photos: string[] = Array.isArray(b.photos) ? b.photos.map(String) : [];
+    if (!Number.isInteger(r) || photos.length > 30 || (!body && !photos.length)) return { ok: false, code: "bad" };
+    if (photos.some((x) => !new RegExp("^reports/" + me.id + "/[0-9a-f-]{36}\\.jpg$").test(x))) return { ok: false, code: "bad" };
+    const a = await db("cleaning_assignments?reservation_id=eq." + r + "&cleaner_id=eq." + me.id + "&select=job_date,reservation_id");
+    if (!a.length) return { ok: false, code: "gone" };
+    const today = nowJST().date;
+    if (a[0].job_date > today || a[0].job_date < plusDaysISO(-3).slice(0, 10)) return { ok: false, code: "gone" };
+    const res = await db("reservations?id=eq." + r + "&select=property_id");
+    const p = res.length ? await db("properties?id=eq." + res[0].property_id + "&select=name") : [];
+    await db("cleaning_reports", "POST", { reservation_id: r, cleaner_id: me.id, body, photos });
+    await toOwners("【報告】" + me.name + " さん " + jaDate(a[0].job_date) + " " + (p[0]?.name ?? "") + (body ? "\n" + body : "") +
+      (photos.length ? "\n(写真 " + photos.length + "枚。アプリの清掃の詳細で見られます)" : ""), "report", r, me.id);
+    return { ok: true };
   }
 
   if (action === "expense") {

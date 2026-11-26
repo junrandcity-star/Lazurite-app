@@ -1,7 +1,7 @@
 // 清掃アプリのお知らせを LINE で送る(試験環境 Lazurite Test)
 // - cleaning_messages に記録されたお知らせを、データベースのトリガーから呼ばれて送る
 // - 呼び出しの確認は合言葉(cleaning_dispatch.key)。LINE やブラウザからは呼ばれないので verify_jwt は false
-// - 清掃員へ:依頼・催促・日程変更・取り消し・本日の清掃(その人の言語、ボタン付き)
+// - 清掃員へ:依頼・催促・日程変更・取り消し・明日の清掃(前日18時)・本日の清掃(その人の言語、ボタン付き)
 // - オーナーへ:連携しているオーナー全員に、記録された文面(日本語)をそのまま送る
 import { asLang, bubble, db, jobLines, lineApi, loadJob, pb, replyButtons, rpc, tr } from "../_shared/line.ts";
 
@@ -37,6 +37,13 @@ async function sendToCleaner(m: Msg) {
       if (j.asg.plan_time) lines.push(tr("plan", lang, { t: j.asg.plan_time }));
       lines.push(tr("todayText", lang));
       msg = bubble(tr("todayTitle", lang), lines, [{ label: tr("btnStart", lang), data: pb("start", j.reservationId, m.cleaner_id!), primary: true }]);
+    } else if (m.kind === "tomorrow") {
+      // 18:00 the day before: a reminder, with a button for "I can't go after all"
+      if (st !== "ok") return mark(m.id, "stale");
+      const lines = jobLines(j, lang);
+      if (j.asg.plan_time) lines.push(tr("plan", lang, { t: j.asg.plan_time }));
+      lines.push(tr("tomorrowText", lang));
+      msg = bubble(tr("tomorrowTitle", lang), lines, [{ label: tr("btnCant", lang), data: pb("cant", j.reservationId, m.cleaner_id!) }]);
     } else {
       return mark(m.id, "unknown_kind");
     }

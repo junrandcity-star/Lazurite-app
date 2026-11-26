@@ -20,7 +20,7 @@ export const DB = {
     { id: 5, property_id: 1, check_out: plus(9), check_in: plus(7), status: 'cancelled', guests: 2 },
   ],
   properties: [{ id: 1, name: 'Laughter' }, { id: 2, name: 'Pear Field' }],
-  property_cleaning: [{ property_id: 1, out_time: '10:00', in_time: '16:00' }, { property_id: 2, out_time: '11:00', in_time: '15:00' }],
+  property_cleaning: [{ property_id: 1, out_time: '10:00', in_time: '16:00', duration_min: 180 }, { property_id: 2, out_time: '11:00', in_time: '15:00' }],
   cleaners: [
     { id: C1, name: 'Anan', lang: 'th', line_user_id: 'U_anan', line_code: null, active: true },
     { id: C2, name: '佐藤', lang: 'ja', line_user_id: null, line_code: '123456', active: true },
@@ -38,6 +38,7 @@ export const DB = {
   cleaning_expenses: [{ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', cleaner_id: C1, property_id: 1, purchased_on: today, amount: 500, store: '', item: '洗剤', status: 'returned', reason: 'レシートが見えません', photo_path: 'receipts/' + C1 + '/x.jpg', created_at: '1' }],
   pay_confirms: [],
   cleaning_log: [],
+  cleaning_reports: [],
 };
 export const LINE = [];
 let msgId = 0;
@@ -89,7 +90,7 @@ globalThis.fetch = async (url, init = {}) => {
   }
   if (method === 'PATCH') { rows.forEach((r) => Object.assign(r, body)); return ok(rows.map((r) => ({ ...r }))); }
   if (method === 'POST') {
-    const row = { id: ++msgId, delivered_at: null, ...body }; DB[table].push(row);
+    const row = { id: ++msgId, delivered_at: null, created_at: new Date().toISOString(), ...body }; DB[table].push(row);
     if (table === 'cleaning_messages') pendingDispatch = true; // the database trigger would call line-send
     return ok([row], 201);
   }

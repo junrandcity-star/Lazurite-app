@@ -85,11 +85,11 @@
   async function loadState() {
     const sync = await sb.rpc('cleaning_sync'); // automatic requests / reminders / cancellations
     if (sync.error) console.error(sync.error);
-    const [props, pc, pm, cleaners, res, asg, areas, exps, confs, log, msgs, set, myLine] = await Promise.all([
+    const [props, pc, pm, allC, res, asg, areas, exps, confs, log, msgs, set, myLine, reps, failed] = await Promise.all([
       q(sb.from('properties').select('id,name').order('name')),
       q(sb.from('property_cleaning').select('*')),
       q(sb.from('property_cleaners').select('*')),
-      q(sb.from('cleaners').select('*').eq('active', true).order('created_at')),
+      q(sb.from('cleaners').select('*').order('created_at')),
       fetchAll('reservations', (t0) => t0.select('id,property_id,check_in,check_out,guests').eq('status', 'confirmed').gte('check_out', FROM).order('check_out').order('id')),
       fetchAll('cleaning_assignments', (t0) => t0.select('*').gte('job_date', FROM).order('reservation_id').order('cleaner_id')),
       q(sb.from('guide_areas').select('*').order('sort')),
@@ -99,6 +99,8 @@
       q(sb.from('cleaning_messages').select('*').eq('audience', 'owner').order('id', { ascending: false }).limit(30)),
       q(sb.from('cleaning_settings').select('*').eq('id', 1).maybeSingle()),
       q(sb.from('owner_line').select('*').maybeSingle()), // only my own row (RLS)
+      q(sb.from('cleaning_reports').select('*').gte('created_at', new Date(Date.now() - 40 * 86400e3).toISOString()).order('created_at')),
+      q(sb.from('cleaning_messages').select('id,created_at,audience,kind,body,send_error').eq('send_status', 'failed').gte('created_at', new Date(Date.now() - 7 * 86400e3).toISOString()).order('id', { ascending: false }).limit(50)),
     ]);
     const paths = areas.map(a => a.photo_path).concat(exps.map(e => e.photo_path)).filter(Boolean);
     const urls = {};
@@ -108,34 +110,39 @@
     }
     const pcBy = Object.fromEntries(pc.map(x => [x.property_id, x]));
     const nameOf = Object.fromEntries(props.map(p => [p.id, p.name]));
-    const cIds = new Set(cleaners.map(c => c.id));
+    const cleaners = allC.filter(c => c.active);
+    const cIds = new Set(cleaners.map(c => c.id)); // working cleaners
+    const allIds = new Set(allC.map(c => c.id)); // with paused ones: their past records stay
     const st = {};
-    st.cleaners = cleaners.map(c => ({ id: c.id, name: c.name, lang: c.lang, contact: c.contact, line: { linked: !!c.line_user_id, code: c.line_code, at: c.line_linked_at } }));
+    st.allCleaners = allC.map(c => ({ id: c.id, name: c.name, lang: c.lang, contact: c.contact, active: !!c.active, line: { linked: !!c.line_user_id, code: c.line_code, at: c.line_linked_at } }));
+    st.cleaners = st.allCleaners.filter(c => c.active);
     st.myLine = { linked: !!(myLine && myLine.line_user_id), code: myLine ? myLine.line_code : null, at: myLine ? myLine.line_linked_at : null };
     st.props = props.map(p => { const x = pcBy[p.id] || {}; return {
-      id: p.id, name: p.name, out: x.out_time || '10:00', in: x.in_time || '16:00', rate: x.rate || 0,
+      id: p.id, name: p.name, out: x.out_time || '10:00', in: x.in_time || '16:00', dur: x.duration_min || 120, rate: x.rate || 0,
       main: cIds.has(x.main_cleaner_id) ? x.main_cleaner_id : null,
       members: pm.filter(m => m.property_id === p.id && cIds.has(m.cleaner_id)).map(m => m.cleaner_id) }; });
     const asgBy = {};
-    asg.forEach(a => { if (cIds.has(a.cleaner_id)) (asgBy[a.reservation_id] = asgBy[a.reservation_id] || []).push({
-      c: a.cleaner_id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, auto: a.auto, remind: a.remind_count, reminded: a.reminded_on, fee: a.fee_override, feeNote: a.fee_note }); });
+    asg.forEach(a => { if (allIds.has(a.cleaner_id)) (asgBy[a.reservation_id] = asgBy[a.reservation_id] || []).push({
+      c: a.cleaner_id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, auto: a.auto, remind: a.remind_count, reminded: a.reminded_on, fee: a.fee_override, feeNote: a.fee_note, rateDone: a.rate_at_done }); });
     const byProp = {};
     res.forEach(r => { (byProp[r.property_id] = byProp[r.property_id] || []).push(r); });
     st.jobs = res.filter(r => r.check_out && nameOf[r.property_id]).map(r => {
       // next guest of the same property: earliest check-in on or after this check-out
       let next = null;
       byProp[r.property_id].forEach(o => { if (o.id !== r.id && o.check_in >= r.check_out && (!next || o.check_in < next.check_in)) next = o; });
-      return { id: r.id, prop: nameOf[r.property_id], date: r.check_out, nextIn: next ? next.check_in : null, guests: next ? next.guests : null, asg: asgBy[r.id] || [] };
+      return { id: r.id, prop: nameOf[r.property_id], date: r.check_out, nextIn: next ? next.check_in : null, guests: next ? next.guests : null, asg: asgBy[r.id] || [],
+        reports: reps.filter(x => x.reservation_id === r.id).map(x => ({ c: x.cleaner_id, body: x.body, photos: x.photos || [], removed: x.photos_removed, n: (x.photos || []).length, at: x.created_at })) };
     }).sort((a, b) => a.date.localeCompare(b.date) || a.prop.localeCompare(b.prop));
     st.guide = {};
     props.forEach(p => { st.guide[p.name] = []; });
     areas.forEach(a => { if (nameOf[a.property_id]) st.guide[nameOf[a.property_id]].push({ id: a.id, key: a.id, name: a.name, notes: a.notes, photoPath: a.photo_path, photo: urls[a.photo_path] || null }); });
-    st.expenses = exps.filter(e => cIds.has(e.cleaner_id)).map(e => ({ id: e.id, c: e.cleaner_id, date: e.purchased_on, amount: e.amount, store: e.store, item: e.item, prop: nameOf[e.property_id] || '', status: e.status, reason: e.reason || '', invoiceNo: e.invoice_no || '', taxRate: e.tax_rate, approvedAt: e.approved_at, photoPath: e.photo_path, photo: urls[e.photo_path] || '' }));
+    st.expenses = exps.filter(e => allIds.has(e.cleaner_id)).map(e => ({ id: e.id, c: e.cleaner_id, date: e.purchased_on, amount: e.amount, store: e.store, item: e.item, prop: nameOf[e.property_id] || '', status: e.status, reason: e.reason || '', invoiceNo: e.invoice_no || '', taxRate: e.tax_rate, approvedAt: e.approved_at, photoPath: e.photo_path, photo: urls[e.photo_path] || '' }));
     st.confirms = {};
     confs.forEach(c => { st.confirms[c.cleaner_id + '|' + c.month] = c.confirmed_at; });
     st.log = log.slice().reverse().map(l => ({ cid: l.cleaner_id, at: l.at, who: l.who, text: l.body }));
     st.notices = msgs.map(m => ({ at: fmtAt(m.created_at), text: m.body, kind: m.kind }));
     st.rule = { replyDays: set ? set.reply_days : 2, horizon: set ? set.horizon_days : 30 };
+    st.failed = failed.map(m => ({ at: fmtAt(m.created_at), text: m.body, who: m.audience, quota: /monthly limit|429/i.test(m.send_error || '') }));
     loadedAt = Date.now();
     return st;
   }
@@ -146,8 +153,8 @@
   function rowsOf() {
     const pid = (name) => { const p = S.props.find(x => x.name === name); return p ? p.id : null; };
     const out = {};
-    out.cleaners = S.cleaners.map(c => ({ id: c.id, name: c.name, lang: c.lang, contact: c.contact, active: true }));
-    out.property_cleaning = S.props.map(p => ({ property_id: p.id, out_time: p.out, in_time: p.in, rate: p.rate, main_cleaner_id: p.main || null }));
+    out.cleaners = S.allCleaners.map(c => ({ id: c.id, name: c.name, lang: c.lang, contact: c.contact, active: c.active !== false }));
+    out.property_cleaning = S.props.map(p => ({ property_id: p.id, out_time: p.out, in_time: p.in, rate: p.rate, duration_min: p.dur || 120, main_cleaner_id: p.main || null }));
     out.property_cleaners = [];
     S.props.forEach(p => p.members.forEach(m => out.property_cleaners.push({ property_id: p.id, cleaner_id: m })));
     out.cleaning_assignments = [];
@@ -227,17 +234,17 @@
   }
 
   // photos: shrink in the browser, then keep in the private "cleaning" storage
-  async function uploadPhoto(file, folder) {
+  async function uploadPhoto(file, folder, maxPx, staffAction) {
     try {
       setSave('saving');
       const bmp = await createImageBitmap(file);
-      const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const k = Math.min(1, (maxPx || 1600) / Math.max(bmp.width, bmp.height));
       const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
       cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
       const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82));
       let path;
       if (STAFF) {
-        const u = await staffApi('upload_url');
+        const u = await staffApi(staffAction || 'upload_url');
         if (!u.ok) throw new Error('upload_url');
         const put = await fetch(u.url, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
         if (!put.ok) throw new Error('upload ' + put.status);
@@ -294,6 +301,14 @@
     vi: { st_saving: 'Đang gửi…', st_saved: '✓ Đã lưu', st_error: 'Không gửi được. Hãy kiểm tra kết nối và thử lại.', st_refused: 'Không thể thực hiện. Đang hiển thị thông tin mới nhất.', st_onlyToday: 'Chỉ bấm "Bắt đầu dọn" được vào ngày dọn.' },
   };
   Object.keys(T7).forEach(k => Object.assign(T[k], T7[k]));
+  const T8 = {
+    ja: { cantLater: '行けなくなった', urgentCall: '今日の清掃です。LINE の電話で、すぐにオーナーに知らせてください。', report: '報告する(メモ・写真)', repHint: '気づいたこと(故障・汚れ・忘れ物・足りない備品など)と写真を送れます。', repPh: '例:浴室の電球が切れています', repAdd: '写真を追加', repUp: '写真を送っています', repKeep: '写真は30日後に自動で消えます。', repSend: '送る', repSent: '報告済み', howto: '使い方' },
+    en: { cantLater: "I can't go anymore", urgentCall: 'This cleaning is today. Please call the owner on LINE right away.', report: 'Report (memo / photos)', repHint: 'Send what you noticed (broken items, stains, things guests left, missing supplies) with photos.', repPh: 'e.g. The bathroom light bulb is broken', repAdd: 'Add photos', repUp: 'Sending photos', repKeep: 'Photos are deleted automatically after 30 days.', repSend: 'Send', repSent: 'Reported', howto: 'How to use' },
+    th: { cantLater: 'ไปไม่ได้แล้ว', urgentCall: 'งานนี้คือวันนี้ กรุณาโทรหาเจ้าของทาง LINE ทันที', report: 'รายงาน (บันทึก・รูป)', repHint: 'ส่งสิ่งที่พบ (ของเสีย รอยเปื้อน ของที่แขกลืม ของใช้ที่ขาด) พร้อมรูปได้', repPh: 'เช่น หลอดไฟในห้องน้ำขาด', repAdd: 'เพิ่มรูป', repUp: 'กำลังส่งรูป', repKeep: 'รูปจะถูกลบอัตโนมัติหลัง 30 วัน', repSend: 'ส่ง', repSent: 'รายงานแล้ว', howto: 'วิธีใช้' },
+    ne: { cantLater: 'अब आउन सक्दिन', urgentCall: 'यो सरसफाइ आजै हो। कृपया तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', report: 'रिपोर्ट (नोट・फोटो)', repHint: 'देखेका कुरा (बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान, नपुगेका सामान) फोटोसहित पठाउन सकिन्छ।', repPh: 'जस्तै: बाथरुमको बत्ती बिग्रिएको छ', repAdd: 'फोटो थप्नुहोस्', repUp: 'फोटो पठाउँदै', repKeep: 'फोटो ३० दिनपछि आफैं मेटिन्छ।', repSend: 'पठाउनुहोस्', repSent: 'रिपोर्ट गरियो', howto: 'प्रयोग विधि' },
+    vi: { cantLater: 'Không đi được nữa', urgentCall: 'Lịch dọn này là hôm nay. Hãy gọi ngay cho chủ nhà qua LINE.', report: 'Báo cáo (ghi chú・ảnh)', repHint: 'Gửi những gì bạn thấy (đồ hỏng, vết bẩn, đồ khách để quên, đồ dùng bị thiếu) kèm ảnh.', repPh: 'Ví dụ: Bóng đèn phòng tắm bị hỏng', repAdd: 'Thêm ảnh', repUp: 'Đang gửi ảnh', repKeep: 'Ảnh sẽ tự động bị xóa sau 30 ngày.', repSend: 'Gửi', repSent: 'Đã báo cáo', howto: 'Cách dùng' },
+  };
+  Object.keys(T8).forEach(k => Object.assign(T[k], T8[k]));
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
   const monthName = (m, lang) => { try { return new Intl.DateTimeFormat(LOC[lang] || 'ja-JP', { year: 'numeric', month: 'long', calendar: 'gregory' }).format(new Date(m + '-15T00:00:00')); } catch (e) { return m; } };
 
@@ -321,7 +336,7 @@
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const prop = (n) => S.props.find(p => p.name === n);
-  const cl = (id) => S.cleaners.find(c => c.id === id);
+  const cl = (id) => (S.allCleaners || S.cleaners).find(c => c.id === id);
   const yen = (v) => '¥' + new Intl.NumberFormat('ja-JP').format(Math.round(v));
   const mins = (hm) => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
   const hm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -485,6 +500,10 @@
       if (a.st === 'ok') pl2.append(ch);
       c.append(pl2);
     }
+    if (a.st === 'ok' && j.date >= TODAY) {
+      const nb = el('button', 'linkbtn del', t('cantLater')); nb.type = 'button'; nb.style.alignSelf = 'flex-start'; nb.onclick = () => openCant(j);
+      c.append(nb);
+    }
     if (a.st === 'ok') {
       const b = el('button', 'btn big-start', t('start')); b.type = 'button'; b.style.padding = '14px'; b.style.fontSize = '1.05rem';
       b.onclick = () => { staffDo('start', { r: j.id }); a.start = nowHM(); a.st = 'work'; const lm = lateMin(a); notify(cl(UI.who).name + ' さんが ' + jaDate(j.date) + ' ' + j.prop + ' の清掃を開始しました' + (lm > 0 ? '(予定より' + lm + '分遅れ)' : '')); render(); };
@@ -498,7 +517,58 @@
       c.append(b);
     }
     if (a.st === 'done') c.append(logLine(a));
+    // report (memo + photos) on the cleaning day and up to 2 days after
+    if (['ok', 'work', 'done'].includes(a.st) && j.date <= TODAY && j.date >= addDays(TODAY, -2)) {
+      const sent = (j.reports || []).filter(r => !r.c || r.c === UI.who);
+      if (sent.length) c.append(el('div', 'rep-done', '✓ ' + t('repSent') + ' ' + sent.length));
+      const rb = el('button', 'btn ghost', t('report')); rb.type = 'button'; rb.onclick = () => openReport(j); c.append(rb);
+    }
     return c;
+  }
+  function openReport(j) {
+    const st = { body: '', photos: [], busy: '' };
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg');
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, t('report')), el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang)), el('div', 'note', t('repHint')));
+      const ta = el('textarea'); ta.value = st.body; ta.placeholder = t('repPh'); ta.setAttribute('aria-label', t('report')); ta.maxLength = 1000; ta.oninput = () => { st.body = ta.value; };
+      sh.append(ta);
+      const grid = el('div', 'rep-photos');
+      st.photos.forEach((ph, i) => { const im = el('img'); im.src = ph.url; im.alt = String(i + 1); grid.append(im); });
+      sh.append(grid);
+      const pick = el('label', 'btn ghost'); pick.append(document.createTextNode(t('repAdd') + ' (' + st.photos.length + '/30)'));
+      const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.multiple = true; file.hidden = true;
+      file.onchange = async () => {
+        const files = [...(file.files || [])].slice(0, 30 - st.photos.length);
+        for (let i = 0; i < files.length; i++) {
+          st.body = ta.value; st.busy = t('repUp') + ' ' + (i + 1) + '/' + files.length; render();
+          const up = await uploadPhoto(files[i], 'reports/' + UI.who, 1280, 'report_url');
+          if (up) st.photos.push(up);
+        }
+        st.busy = ''; render();
+      };
+      pick.append(file);
+      if (!st.busy && st.photos.length < 30) sh.append(pick);
+      if (st.busy) sh.append(el('div', 'note', st.busy));
+      sh.append(el('div', 'note', t('repKeep')));
+      const row = el('div', 'row');
+      const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
+      const ok = el('button', 'btn big-ok', t('repSend')); ok.type = 'button'; ok.disabled = !!st.busy;
+      ok.onclick = async () => {
+        st.body = ta.value.trim();
+        if (!st.body && !st.photos.length) { ta.focus(); return; }
+        const paths = st.photos.map(x => x.path);
+        if (STAFF) staffDo('report', { r: j.id, body: st.body, photos: paths });
+        else {
+          sb.from('cleaning_reports').insert({ reservation_id: j.id, cleaner_id: UI.who, body: st.body, photos: paths }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } });
+          notify('【報告】' + cl(UI.who).name + ' さん ' + jaDate(j.date) + ' ' + j.prop + (st.body ? '\n' + st.body : '') + (paths.length ? '\n(写真 ' + paths.length + '枚。アプリの清掃の詳細で見られます)' : ''), 'report');
+        }
+        (j.reports = j.reports || []).push({ c: UI.who, body: st.body, photos: paths, n: paths.length, at: new Date().toISOString() });
+        UI.sheet = null; render();
+      };
+      row.append(cancel, ok); sh.append(row); bg.append(sh); return bg;
+    };
+    render();
   }
   function logLine(a) {
     const l = el('div', 'log');
@@ -517,7 +587,7 @@
       sh.append(el('h3', null, t('pick')));
       sh.append(el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang) + ' · ' + t('out') + ' ' + p.out + (j.nextIn === j.date ? ' / ' + t('nextIn') + ' ' + p.in : '')));
       const grid = el('div', 'times');
-      const end = mins(p.in) - 120;
+      const end = mins(p.in) - (p.dur || 120);
       for (let m = mins(p.out); m <= end; m += 30) {
         const v = hm(m); const b = el('button', null, v); b.type = 'button'; b.setAttribute('aria-pressed', String(chosen === v));
         b.onclick = () => { chosen = v; grid.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.textContent === v))); ok.disabled = false; };
@@ -539,22 +609,81 @@
       const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
       const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
       sh.append(el('h3', null, t('confirmCant')), el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang)));
+      if (j.date === TODAY) sh.append(el('div', 'urgent-note', t('urgentCall')));
       const row = el('div', 'row');
       const cancel = el('button', 'btn ghost', t('cancel')); cancel.type = 'button'; cancel.onclick = () => { UI.sheet = null; render(); };
       const yes = el('button', 'btn', t('yes')); yes.type = 'button'; yes.style.background = 'var(--bad)'; yes.style.borderColor = 'var(--bad)';
-      yes.onclick = () => { staffDo('cant', { r: j.id }); a.st = 'cant'; delete a.plan; notify(cl(UI.who).name + ' さんから ' + jaDate(j.date) + ' ' + j.prop + ' に「行けない」と返事がありました', 'cant'); UI.sheet = null; render(); };
+      yes.onclick = () => { staffDo('cant', { r: j.id }); a.st = 'cant'; delete a.plan; notify(j.date === TODAY ? '【至急・要対応】' + cl(UI.who).name + ' さんが 本日 ' + jaDate(j.date) + ' ' + j.prop + ' の清掃に行けません。至急、代わりの手配をお願いします。' : cl(UI.who).name + ' さんから ' + jaDate(j.date) + ' ' + j.prop + ' に「行けない」と返事がありました', 'cant'); UI.sheet = null; render(); };
       row.append(cancel, yes); sh.append(row); bg.append(sh); return bg;
     };
     render();
   }
 
   function myProps() { return S.props.filter(p => p.members.includes(UI.who)); }
+  // how to use the app, in the cleaner's language (guide tab -> "How to use")
+  const HOWTO = {
+    ja: [
+      ['依頼が届いたら', ['LINE に「清掃のお願い」が届きます。「OK(時間を選ぶ)」で入る時間を選ぶか、「行けない」を押してください。', 'メニューの「予定」からも返事ができます。1日返事がないと、もう一度お知らせが届きます。']],
+      ['予定が変わったとき', ['OK のあとで行けなくなったら、「予定」でその清掃の「行けなくなった」を押してください。オーナーに知らせが届きます。', '清掃の当日に行けなくなったときは、LINE の電話ですぐにオーナーに連絡してください。', '予約の日にちが変わると「日程が変わりました」が届きます。もう一度返事をしてください。']],
+      ['清掃の日', ['前の日の18時に「明日の清掃」、当日の朝に「本日の清掃」が届きます。', '着いたら「清掃を始める」、終わったら「清掃が終わった」を押してください。オーナーに時刻が届きます。', '入る時間は、チェックアウトから「次のチェックイン − 清掃にかかる時間」までの中から選べます。']],
+      ['気づいたことの報告', ['故障・汚れ・忘れ物・足りない備品などは、その清掃の「報告する」から、メモと写真(30枚まで)で送れます。写真は30日後に消えます。']],
+      ['ガイド', ['施設ごとに、清掃後の写真と注意点があります。「!」の付いた項目は特に気をつけてください。']],
+      ['お給料・立替', ['「お給料」で月ごとの清掃料と立替を見られます。月が終わったら、翌月1日から「明細の内容を確認しました」を押してください。', '清掃のために買い物をしたときは、レシートを撮影して「立替を登録する」から送ってください。']],
+      ['困ったとき', ['わからないことは、この LINE のトークに書くか、オーナーに電話してください。']],
+    ],
+    en: [
+      ['When a request arrives', ['A "Cleaning request" comes to LINE. Press "OK (choose time)" and pick your start time, or press "I can\'t go".', 'You can also reply from "Schedule" in the menu. If you do not reply for 1 day, a reminder is sent.']],
+      ['When plans change', ['If you can no longer go after pressing OK, open the cleaning in "Schedule" and press "I can\'t go anymore". The owner is notified.', 'If you cannot go on the cleaning day itself, call the owner on LINE right away.', 'If the booking date changes, you get "Date changed". Please reply again.']],
+      ['On the cleaning day', ['"Tomorrow\'s cleaning" comes at 18:00 the day before, and "Today\'s cleaning" in the morning.', 'Press "Start cleaning" when you arrive and "Finished cleaning" when you are done. The owner gets the times.', 'You can choose a start time from check-out until "next check-in minus the cleaning time".']],
+      ['Reporting problems', ['For broken items, stains, things guests left or missing supplies, use "Report" on that cleaning to send a memo and photos (up to 30). Photos are deleted after 30 days.']],
+      ['Guide', ['Each property has photos of how it should look after cleaning, and notes. Take special care with items marked "!".']],
+      ['Pay and purchases', ['"Pay" shows your cleaning fees and purchases for each month. After the month ends, press "I checked this statement" from the 1st of the next month.', 'If you buy something for cleaning, take a photo of the receipt and send it with "Add a purchase".']],
+      ['If you need help', ['Write in this LINE chat or call the owner.']],
+    ],
+    th: [
+      ['เมื่อได้รับคำขอ', ['จะมี "ขอให้ทำความสะอาด" ส่งมาทาง LINE กด "ตกลง (เลือกเวลา)" แล้วเลือกเวลาเริ่ม หรือกด "ไปไม่ได้"', 'ตอบจาก "ตารางงาน" ในเมนูได้เช่นกัน ถ้าไม่ตอบภายใน 1 วัน จะมีข้อความเตือนอีกครั้ง']],
+      ['เมื่อแผนเปลี่ยน', ['ถ้ากดตกลงแล้วแต่ไปไม่ได้ ให้เปิดงานนั้นใน "ตารางงาน" แล้วกด "ไปไม่ได้แล้ว" ระบบจะแจ้งเจ้าของ', 'ถ้าไปไม่ได้ในวันทำความสะอาด กรุณาโทรหาเจ้าของทาง LINE ทันที', 'ถ้าวันที่จองเปลี่ยน จะได้รับ "วันที่เปลี่ยนแล้ว" กรุณาตอบอีกครั้ง']],
+      ['วันทำความสะอาด', ['"งานทำความสะอาดพรุ่งนี้" จะส่งมาเวลา 18:00 ของวันก่อน และ "งานทำความสะอาดวันนี้" ในตอนเช้า', 'กด "เริ่มทำความสะอาด" เมื่อไปถึง และกด "ทำความสะอาดเสร็จแล้ว" เมื่อเสร็จ เจ้าของจะได้รับเวลา', 'เลือกเวลาเริ่มได้ตั้งแต่เช็คเอาท์ จนถึง "เช็คอินถัดไป − เวลาที่ใช้ทำความสะอาด"']],
+      ['รายงานสิ่งที่พบ', ['ของเสีย รอยเปื้อน ของที่แขกลืม หรือของใช้ที่ขาด ส่งบันทึกและรูป (สูงสุด 30 รูป) ได้จาก "รายงาน" ของงานนั้น รูปจะถูกลบหลัง 30 วัน']],
+      ['คู่มือ', ['แต่ละบ้านมีรูปหลังทำความสะอาดและข้อควรระวัง ระวังเป็นพิเศษกับข้อที่มี "!"']],
+      ['ค่าจ้างและเงินคืน', ['ดูค่าทำความสะอาดและเงินคืนรายเดือนได้ที่ "ค่าจ้าง" เมื่อจบเดือน ให้กด "ตรวจสอบรายละเอียดแล้ว" ได้ตั้งแต่วันที่ 1 ของเดือนถัดไป', 'ถ้าซื้อของเพื่อทำความสะอาด ให้ถ่ายรูปใบเสร็จแล้วส่งจาก "บันทึกการซื้อของ"']],
+      ['เมื่อมีปัญหา', ['เขียนในแชท LINE นี้ หรือโทรหาเจ้าของ']],
+    ],
+    ne: [
+      ['अनुरोध आएपछि', ['LINE मा "सरसफाइ अनुरोध" आउँछ। "ठीक छ (समय छान्नुहोस्)" थिचेर सुरु गर्ने समय छान्नुहोस्, वा "जान सक्दिनँ" थिच्नुहोस्।', 'मेनुको "तालिका" बाट पनि जवाफ दिन सकिन्छ। १ दिनसम्म जवाफ नदिए फेरि सूचना आउँछ।']],
+      ['योजना बदलिएमा', ['"ठीक छ" थिचेपछि जान नसक्ने भएमा, "तालिका" मा त्यो काम खोलेर "अब आउन सक्दिन" थिच्नुहोस्। मालिकलाई जानकारी जान्छ।', 'सरसफाइकै दिन जान नसक्ने भएमा, तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', 'बुकिङको मिति बदलिएमा "मिति परिवर्तन भयो" आउँछ। फेरि जवाफ दिनुहोस्।']],
+      ['सरसफाइको दिन', ['अघिल्लो दिन साँझ ६ बजे "भोलिको सरसफाइ" र बिहान "आजको सरसफाइ" आउँछ।', 'पुगेपछि "सरसफाइ सुरु", सकिएपछि "सरसफाइ सकियो" थिच्नुहोस्। मालिकलाई समय पुग्छ।', 'सुरु गर्ने समय चेक-आउटदेखि "अर्को चेक-इन − सरसफाइमा लाग्ने समय" सम्म छान्न सकिन्छ।']],
+      ['देखेका कुराको रिपोर्ट', ['बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान वा नपुगेका सामानबारे त्यो कामको "रिपोर्ट" बाट नोट र फोटो (३० वटासम्म) पठाउनुहोस्। फोटो ३० दिनपछि मेटिन्छ।']],
+      ['निर्देशिका', ['हरेक घरको सरसफाइपछिको फोटो र ध्यान दिनुपर्ने कुरा छन्। "!" भएका कुरामा विशेष ध्यान दिनुहोस्।']],
+      ['तलब र खर्च फिर्ता', ['"तलब" मा हरेक महिनाको सरसफाइ शुल्क र खर्च हेर्न सकिन्छ। महिना सकिएपछि अर्को महिनाको १ गतेदेखि "विवरण जाँचें" थिच्नुहोस्।', 'सरसफाइका लागि केही किनेमा, रसिदको फोटो खिचेर "खरिद दर्ता गर्नुहोस्" बाट पठाउनुहोस्।']],
+      ['समस्या परेमा', ['यही LINE च्याटमा लेख्नुहोस् वा मालिकलाई फोन गर्नुहोस्।']],
+    ],
+    vi: [
+      ['Khi nhận được yêu cầu', ['LINE sẽ gửi "Yêu cầu dọn dẹp". Bấm "OK (chọn giờ)" rồi chọn giờ bắt đầu, hoặc bấm "Không đi được".', 'Bạn cũng có thể trả lời từ "Lịch" trong menu. Nếu 1 ngày không trả lời, sẽ có thông báo nhắc lại.']],
+      ['Khi kế hoạch thay đổi', ['Nếu đã bấm OK nhưng không đi được nữa, mở lịch đó trong "Lịch" và bấm "Không đi được nữa". Chủ nhà sẽ được báo.', 'Nếu không đi được vào chính ngày dọn, hãy gọi ngay cho chủ nhà qua LINE.', 'Nếu ngày đặt phòng thay đổi, bạn sẽ nhận "Đã đổi ngày". Hãy trả lời lại.']],
+      ['Ngày dọn dẹp', ['"Lịch dọn ngày mai" được gửi lúc 18:00 hôm trước, và "Lịch dọn hôm nay" vào buổi sáng.', 'Khi đến nơi bấm "Bắt đầu dọn", khi xong bấm "Đã dọn xong". Chủ nhà sẽ nhận được giờ.', 'Có thể chọn giờ bắt đầu từ giờ trả phòng đến "giờ nhận phòng tiếp theo − thời gian dọn".']],
+      ['Báo cáo điều nhận thấy', ['Đồ hỏng, vết bẩn, đồ khách để quên hoặc đồ dùng bị thiếu: dùng "Báo cáo" của lịch dọn đó để gửi ghi chú và ảnh (tối đa 30 ảnh). Ảnh sẽ bị xóa sau 30 ngày.']],
+      ['Hướng dẫn', ['Mỗi nhà có ảnh sau khi dọn và các lưu ý. Hãy đặc biệt chú ý các mục có dấu "!".']],
+      ['Tiền lương và hoàn tiền', ['Xem tiền dọn và tiền mua đồ theo tháng trong "Tiền lương". Hết tháng, từ ngày 1 tháng sau hãy bấm "Tôi đã kiểm tra bảng kê".', 'Nếu mua đồ để dọn dẹp, hãy chụp hóa đơn và gửi bằng "Đăng ký mua đồ".']],
+      ['Khi cần giúp đỡ', ['Hãy viết vào cuộc trò chuyện LINE này hoặc gọi cho chủ nhà.']],
+    ],
+  };
+  function howtoView() {
+    const box = el('div', 'howto');
+    (HOWTO[UI.lang] || HOWTO.ja).forEach(([h, items]) => {
+      const c = el('article', 'card area'); const b = el('div', 'area-body');
+      b.append(el('h4', null, h)); const ul = el('ul'); items.forEach(x => ul.append(el('li', null, x))); b.append(ul); c.append(b); box.append(c);
+    });
+    return box;
+  }
   function cleanerGuide() {
     const out = [];
     const mine = myProps();
-    if (!mine.length) return [el('div', 'empty', t('empty'))];
-    if (!mine.some(p => p.name === UI.gprop)) UI.gprop = mine[0].name;
+    const HT = '__howto';
+    if (UI.gprop !== HT && !mine.some(p => p.name === UI.gprop)) UI.gprop = mine.length ? mine[0].name : HT;
     const bar = el('div', 'g-props');
+    { const b = el('button', null, '? ' + t('howto')); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.gprop === HT)); b.onclick = () => { UI.gprop = HT; render(); }; bar.append(b); }
+    if (UI.gprop === HT) { out.push(bar, howtoView()); return out; }
     mine.forEach(p => { const b = el('button', null, p.name); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.gprop === p.name)); b.onclick = () => { UI.gprop = p.name; render(); }; bar.append(b); });
     out.push(bar, el('div', 'g-hint', t('hint')));
     S.guide[UI.gprop].forEach(ar => {
@@ -576,9 +705,10 @@
       if (j.date.slice(0, 7) !== month) return;
       const a = j.asg.find(x => x.c === cid && x.st === 'done'); if (!a) return;
       const share = j.asg.length >= 2 ? 0.5 : 1;
-      const base = prop(j.prop).rate * share;
+      const rate = a.rateDone != null ? a.rateDone : prop(j.prop).rate; // fixed when finished
+      const base = rate * share;
       // the owner may have changed the fee for this cleaning (urgent request etc.)
-      rows.push({ j, a, base, amount: a.fee == null ? base : a.fee, edited: a.fee != null, note: a.feeNote || '', half: share < 1 });
+      rows.push({ j, a, rate, base, amount: a.fee == null ? base : a.fee, edited: a.fee != null, note: a.feeNote || '', half: share < 1 });
     });
     return rows.sort((a, b) => a.j.date.localeCompare(b.j.date));
   }
@@ -590,11 +720,11 @@
     ok: ['sb-ok', '✓', 'OK'], work: ['sb-work', '▶', '清掃中'], done: ['sb-done', '✓', '完了'],
   };
   const unsettled = (j) => ['none', 'wait', 'bad', 'late', 'rush'].includes(jobStatus(j));
-  const needsFollow = (j) => { const s = jobStatus(j); return s === 'none' ? !!prop(j.prop).main : ['bad', 'late', 'rush'].includes(s); }; // the owner has to act
+  const needsFollow = (j) => ['none', 'bad', 'late', 'rush'].includes(jobStatus(j)); // the owner has to act
   const names = (list) => list.map(a => cl(a.c).name + ' さん').join('・');
   function followReason(j) {
     const s = jobStatus(j);
-    if (s === 'none') return 'メイン担当が決まっていないため、自動送信できていません。';
+    if (s === 'none') return prop(j.prop).main ? 'まだ誰にも依頼していません。' : 'メイン担当が決まっていないため、自動送信できていません。';
     if (s === 'bad') return names(j.asg.filter(a => a.st === 'cant')) + 'から「行けない」と返事がありました。';
     if (s === 'rush') { const w = stuck(j); return '清掃日が' + (j.date === TODAY ? '今日' : '明日') + 'です。' + names(w) + 'に ' + md(w[0].sent) + ' に送信済みですが、まだ返事がありません' + (w[0].remind ? '(再送 ' + w[0].remind + '回)' : '') + '。日が近いため、すぐに表示しています。'; }
     const late = j.asg.filter(isLate);
@@ -753,7 +883,7 @@
       if (j.guests != null) meta.append(document.createTextNode(' · 次のお客様 ' + j.guests + '人'));
       body.append(meta);
       const who = el('div', 'who');
-      if (!j.asg.length) who.append(el('span', 'note', past ? '記録がありません' : s === 'pre' ? 'まだ送信していません(清掃日の ' + S.rule.horizon + '日前になると自動で送信します)' : 'メイン担当が決まっていないため、自動送信できていません'));
+      if (!j.asg.length) who.append(el('span', 'note', past ? '記録がありません' : s === 'pre' ? 'まだ送信していません(清掃日の ' + S.rule.horizon + '日前になると自動で送信します)' : prop(j.prop).main ? 'まだ誰にも依頼していません' : 'メイン担当が決まっていないため、自動送信できていません'));
       j.asg.forEach(a => {
         const map = { wait: ['s-wait', '返事待ち'], ok: ['s-ok', 'OK'], work: ['s-work', '清掃中'], done: ['s-done', '完了'], cant: ['s-bad', '行けない'] };
         const span = el('span'); span.style.display = 'inline-flex'; span.style.gap = '6px'; span.style.alignItems = 'center';
@@ -769,7 +899,12 @@
         span.append(tm); who.append(span);
       });
       if (j.asg.length >= 2) who.append(el('span', 'note', '2名(清掃料は折半)'));
-      body.append(who); c.append(body);
+      body.append(who);
+      if (j.reports && j.reports.length) {
+        const rb = el('button', 'linkbtn', '📝 清掃員からの報告 ' + j.reports.length + '件(写真 ' + j.reports.reduce((n, r) => n + r.n, 0) + '枚)を見る'); rb.type = 'button'; rb.style.alignSelf = 'flex-start';
+        rb.onclick = () => openReports(j); body.append(rb);
+      }
+      c.append(body);
       const act = el('div', 'act');
       if (!past && s !== 'done') {
         if (follow) act.append(...followBtns(j));
@@ -780,6 +915,35 @@
     });
     if (!list.length) wrap.append(el('div', 'empty', '該当する清掃はありません'));
     return wrap;
+  }
+  // owner: reports with photos (signed links are made when opened)
+  async function openReports(j) {
+    const paths = j.reports.flatMap(r => r.photos);
+    const urls = {};
+    if (paths.length) {
+      const signed = await sb.storage.from('cleaning').createSignedUrls(paths, 3600);
+      (signed.data || []).forEach(x => { if (x.signedUrl) urls[x.path] = x.signedUrl; });
+    }
+    UI.sheet = () => {
+      const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
+      const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
+      sh.append(el('h3', null, '清掃員からの報告'), el('div', 'muted', jaDate(j.date) + ' ' + j.prop));
+      j.reports.forEach(r => {
+        const it = el('div', 'rep-item');
+        it.append(el('div', 'note', (cl(r.c) ? cl(r.c).name + ' さん · ' : '') + fmtAt(r.at)));
+        if (r.body) it.append(el('div', 'tx', r.body));
+        if (r.photos.length) {
+          const g = el('div', 'rep-photos');
+          r.photos.forEach((ph, i) => { if (!urls[ph]) return; const a = el('a'); a.href = urls[ph]; a.target = '_blank'; a.rel = 'noopener'; const im = el('img'); im.src = urls[ph]; im.alt = '写真 ' + (i + 1); a.append(im); g.append(a); });
+          it.append(g);
+        } else if (r.removed) it.append(el('div', 'note', '写真は30日たったため削除されました。'));
+        sh.append(it);
+      });
+      sh.append(el('div', 'note', '写真をタップすると大きく表示されます(保存もできます)。写真は報告から30日後に自動で削除されます。'));
+      const row = el('div', 'row'); const cb = el('button', 'btn', '閉じる'); cb.type = 'button'; cb.onclick = () => { UI.sheet = null; render(); }; row.append(cb); sh.append(row);
+      bg.append(sh); return bg;
+    };
+    render();
   }
   const pillEl = (cls, text) => { const p = el('span', 'pill ' + cls); p.append(el('i'), document.createTextNode(text)); return p; };
 
@@ -925,14 +1089,17 @@
       const cs = el('select'); cs.setAttribute('aria-label', c.name + ' の連絡方法');
       ['LINE', 'メール'].forEach(v => { const o = el('option', null, '連絡:' + v); o.value = v; cs.append(o); }); cs.value = c.contact;
       cs.onchange = () => { c.contact = cs.value; };
-      const del = el('button', 'linkbtn del', UI.delC === c.id ? '本当に削除する(この人への依頼の記録も消えます)' : '削除'); del.type = 'button'; del.style.marginLeft = 'auto';
+      // pause (leaving etc.): the records stay; future requests are taken back
+      const future = S.jobs.filter(j => j.date >= TODAY && j.asg.some(a => a.c === c.id && ['wait', 'ok', 'cant'].includes(a.st)));
+      const del = el('button', 'linkbtn del', UI.delC === c.id ? '本当に休止する' + (future.length ? '(今後の依頼 ' + future.length + '件を取り消して本人に知らせます)' : '') : '休止'); del.type = 'button'; del.style.marginLeft = 'auto';
       del.onclick = () => {
         if (UI.delC !== c.id) { UI.delC = c.id; render(); return; }
+        c.active = false;
         S.cleaners = S.cleaners.filter(x => x.id !== c.id);
         S.props.forEach(p => { p.members = p.members.filter(x => x !== c.id); if (p.main === c.id) p.main = null; });
-        S.jobs.forEach(j => { j.asg = j.asg.filter(a => a.c !== c.id); });
-        S.expenses = S.expenses.filter(e => e.c !== c.id);
-        Object.keys(S.confirms).forEach(k => { if (k.split('|')[0] === c.id) delete S.confirms[k]; });
+        future.forEach(j => { j.asg = j.asg.filter(a => a.c !== c.id); });
+        toCleaners(future.map(j => ({ cleaner_id: c.id, reservation_id: j.id, kind: 'cancel', body: jaDate(j.date) + ' ' + j.prop + ' の清掃依頼は取り消されました' })));
+        addLog(c.id, 'オーナー', '休止にしました');
         UI.delC = null; render();
       };
       top.append(ls, cs, del); card.append(top);
@@ -944,6 +1111,18 @@
       }));
       wrap.append(card);
     });
+    const paused = S.allCleaners.filter(c => !c.active);
+    if (paused.length) {
+      const pc0 = el('div', 'card mgr-row');
+      pc0.append(el('div', 'nm', '休止中の清掃員'), el('div', 'note', '依頼は届かず、清掃員用アプリも開けません。これまでの清掃・お給料・立替の記録は残っています。'));
+      paused.forEach(c => {
+        const r = el('div', 'top'); r.append(el('span', null, c.name + '(' + LANG_JA[c.lang] + ')'));
+        const rb = el('button', 'btn ghost small', '再開する'); rb.type = 'button'; rb.style.marginLeft = 'auto';
+        rb.onclick = () => { c.active = true; S.cleaners.push(c); addLog(c.id, 'オーナー', '休止を解除しました'); render(); };
+        r.append(rb); pc0.append(r);
+      });
+      wrap.append(pc0);
+    }
     // add form
     const add = el('div', 'card mgr-row');
     add.append(el('div', 'nm', '清掃員を追加'));
@@ -961,11 +1140,12 @@
     btn.onclick = () => {
       const name = nm.value.trim(); if (!name) { msg.textContent = '名前を入力してください。'; nm.focus(); return; }
       const id = crypto.randomUUID();
-      S.cleaners.push({ id, name, lang: lg.value, contact: ct.value, line: { linked: false, code: null, at: null } });
+      const nc = { id, name, lang: lg.value, contact: ct.value, active: true, line: { linked: false, code: null, at: null } };
+      S.cleaners.push(nc); S.allCleaners.push(nc);
       S.props.forEach(p => { if (pick.has(p.name)) p.members.push(id); });
       render();
     };
-    add.append(btn, msg, el('div', 'note', '清掃員本人がログインして使えるようにする機能は、次の段階で追加します。'));
+    add.append(btn, msg, el('div', 'note', '清掃員は LINE を連携すると、LINE のメニューから清掃員用アプリを開けます。'));
     wrap.append(add);
     return wrap;
   }
@@ -983,7 +1163,7 @@
     [2, 3].forEach(n => { const o = el('option', null, n + '日'); o.value = String(n); sel.append(o); }); sel.value = String(S.rule.replyDays);
     sel.onchange = () => { S.rule.replyDays = Number(sel.value); render(); };
     const hz = el('select'); hz.setAttribute('aria-label', '自動送信の対象期間');
-    [[30, '30日'], [60, '60日'], [90, '90日'], [365, '1年']].forEach(([n, l]) => { const o = el('option', null, l); o.value = String(n); hz.append(o); }); hz.value = String(S.rule.horizon);
+    [[14, '14日'], [21, '21日'], [30, '30日'], [60, '60日'], [90, '90日'], [365, '1年']].forEach(([n, l]) => { const o = el('option', null, l); o.value = String(n); hz.append(o); }); hz.value = String(S.rule.horizon);
     hz.onchange = () => { S.rule.horizon = Number(hz.value); render(); };
     const s1x = el('span'); s1x.append(document.createTextNode('チェックアウトの予約が入ると、その施設の「メイン担当」に清掃の依頼を自動で送ります。対象は、清掃日が今日から '), hz, document.createTextNode(' 以内の予約です。それより先の予約は、その期間に入った時点で自動で送ります。'));
     const s3 = el('span'); s3.append(document.createTextNode('次のどれかに当てはまると、オーナーの画面に「要フォロー」と表示します。①「行けない」の返事が来た ②送信から '), sel, document.createTextNode(' たっても返事がない ③清掃日が今日・明日なのに返事がない(前日に入った予約など。日数を待たずにすぐ表示)。オーナーは「もう一度送る」か「代わりの人に依頼」を選びます。'));
@@ -992,14 +1172,15 @@
       step(2, document.createTextNode('清掃員は LINE のボタン「OK(時間を選ぶ)」または「行けない」で返事をします。')),
       step(3, document.createTextNode('送信から1日たっても返事がないときは、アプリが自動でもう一度お知らせして、返事を促します。')),
       step(4, s3),
-      step(5, document.createTextNode('清掃の当日の朝、OK の返事をした清掃員に「本日の清掃」が届きます。清掃員が「清掃を始める」「清掃が終わった」を押すと、時刻が記録され、オーナーの LINE に通知が届きます。')),
-      step(6, document.createTextNode('【将来の予定】「清掃が終わった」が押されたら、次のゲストに「清掃が終わったので入室できます」というメールを自動で送ります。Beds24 側のメール設定ができてから対応します。')),
+      step(5, document.createTextNode('前日の18時に「明日の清掃」、当日の朝に「本日の清掃」が、OK の返事をした清掃員に届きます。清掃員が「清掃を始める」「清掃が終わった」を押すと、時刻が記録され、オーナーの LINE に通知が届きます。清掃員は「報告する」で、気づいたことをメモと写真で送れます(写真は30日後に自動で削除)。')),
+      step(6, document.createTextNode('次のときはオーナーの LINE にお知らせが届きます:清掃日が今日・明日なのに返事がない(8〜21時)/予定の時刻を30分過ぎても「清掃を始める」が押されない/開始から3時間たっても「清掃が終わった」が押されない/当日に「行けない」(至急)/清掃員が LINE の連携を外した。')),
+      step(7, document.createTextNode('【将来の予定】「清掃が終わった」が押されたら、次のゲストに「清掃が終わったので入室できます」というメールを自動で送ります。Beds24 側のメール設定ができてから対応します。')),
       el('div', 'note', '依頼・催促・オーナーへの通知は LINE で送ります(LINE を連携している人のみ)。清掃員は LINE のボタンで返事や開始・完了ができます。'));
     wrap.append(rc);
     const card = el('div', 'card panel');
     card.append(el('h2', null, '施設と担当'));
     const tw = el('div', 'table-wrap'); const tb = el('table');
-    const hr = el('tr'); ['施設', 'OUT〜IN', '清掃料(1回)', '担当する清掃員', 'メイン担当(自動送信の送り先)'].forEach(x => hr.append(el('th', null, x)));
+    const hr = el('tr'); ['施設', 'OUT〜IN', '清掃にかかる時間', '清掃料(1回)', '担当する清掃員', 'メイン担当(自動送信の送り先)'].forEach(x => hr.append(el('th', null, x)));
     const thead = el('thead'); thead.append(hr); const body = el('tbody');
     S.props.forEach(p => {
       const tr = el('tr'); tr.append(el('td', null, p.name));
@@ -1007,6 +1188,11 @@
       s1.value = p.out; s1.setAttribute('aria-label', p.name + ' OUT〜IN');
       s1.onchange = () => { p.out = s1.value; p.in = s1.value === '10:00' ? '16:00' : '15:00'; };
       td1.append(s1); tr.append(td1);
+      const tdD = el('td'); const sD = el('select'); sD.setAttribute('aria-label', p.name + ' 清掃にかかる時間');
+      for (let m = 60; m <= 360; m += 30) { const op = el('option', null, Math.floor(m / 60) + '時間' + (m % 60 ? '30分' : '')); op.value = String(m); sD.append(op); }
+      sD.value = String(p.dur || 120); sD.onchange = () => { p.dur = Number(sD.value); render(); };
+      const lastT = mins(p.in) - (p.dur || 120);
+      tdD.append(sD, el('div', 'note', lastT >= mins(p.out) ? '開始は ' + hm(lastT) + ' まで' : '時間が足りません')); tr.append(tdD);
       const td2 = el('td'); const inp = el('input'); inp.type = 'number'; inp.step = '500'; inp.value = p.rate; inp.setAttribute('aria-label', p.name + ' 清掃料');
       inp.onchange = () => { p.rate = Number(inp.value) || 0; }; td2.append(inp); tr.append(td2);
       const td3 = el('td'); td3.style.whiteSpace = 'normal';
@@ -1034,7 +1220,7 @@
       body.append(tr);
     });
     tb.append(thead, body); tw.append(tb); card.append(tw);
-    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。担当は「変更」から選ぶか、「清掃員」タブでまとめて選べます(すべての施設もまとめて選べます)。メイン担当は自動送信の送り先です。'));
+    card.append(el('div', 'note', '「担当する清掃員」に入っている人だけが、その施設の清掃とガイドを見られます。担当は「変更」から選ぶか、「清掃員」タブでまとめて選べます(すべての施設もまとめて選べます)。メイン担当は自動送信の送り先です。「清掃にかかる時間」は、清掃員が選べる開始時間の上限になります(チェックインの時刻 − この時間 まで)。'));
     wrap.append(card);
     return wrap;
   }
@@ -1114,10 +1300,20 @@
     head.append(el('span', null, '🔔 清掃員からの通知'), fresh ? el('span', 'ntc-new', '新着 ' + fresh + '件') : el('span', 'note', S.notices.length + '件'), el('span', 'note sp', UI.noticeOpen ? '閉じる ▲' : '開く ▼'));
     head.onclick = () => { if (UI.noticeOpen) S.notices.forEach(n => { n.fresh = false; }); UI.noticeOpen = !UI.noticeOpen; render(); };
     box.append(head);
+    // LINE messages that could not be sent in the last 7 days (always shown)
+    const failed = S.failed || [];
+    if (failed.length) {
+      const fb = el('div', 'ntc-body fail');
+      const quota = failed.some(f => f.quota);
+      fb.append(el('div', 'h', '⚠ LINE で送れなかったお知らせが ' + failed.length + '件 あります(この7日間)'),
+        el('div', 'note', quota ? 'LINE の月の送信数の上限に達したため送れませんでした。LINE Official Account Manager でプランや追加メッセージを確認してください。下の内容は、清掃員・オーナーに届いていません。' : '下の内容は、清掃員・オーナーに届いていません。必要なら LINE のトークなどで直接連絡してください。'));
+      failed.slice(0, 10).forEach(f => { const r = el('div', 'ntc-row cant'); r.append(el('span', 'at', f.at), el('span', 'tx', (f.who === 'cleaner' ? '[清掃員へ] ' : '[オーナーへ] ') + f.text)); fb.append(r); });
+      box.append(fb);
+    }
     if (UI.noticeOpen) {
       const body = el('div', 'ntc-body');
-      body.append(el('div', 'note', '清掃員が「OK」「行けない」「清掃を始める」「清掃が終わった」を押すと、LINE を連携しているオーナーに、下の文面が届きます。'));
-      S.notices.slice(0, 20).forEach(n => { const r = el('div', 'ntc-row' + (n.kind === 'cant' ? ' cant' : '') + (n.fresh ? ' fresh' : '')); r.append(el('span', 'at', n.at), el('span', 'tx', n.text)); body.append(r); });
+      body.append(el('div', 'note', '清掃員の返事・開始・完了・報告や、返事がない・開始や完了が押されないときのお知らせが、LINE を連携しているオーナーに下の文面で届きます。'));
+      S.notices.slice(0, 20).forEach(n => { const r = el('div', 'ntc-row' + (['cant', 'norep', 'nostart', 'nodone', 'unlinked'].includes(n.kind) ? ' cant' : '') + (n.fresh ? ' fresh' : '')); r.append(el('span', 'at', n.at), el('span', 'tx', n.text)); body.append(r); });
       box.append(body);
     }
     return box;
@@ -1384,7 +1580,7 @@
     const hr = el('tr'); ['清掃員', '清掃', '清掃料', '立替精算', '支払合計', '本人確認', ''].forEach((x, i) => hr.append(el('th', i && i < 5 ? 'num' : null, x)));
     const thead = el('thead'); thead.append(hr); const body = el('tbody');
     let all = 0;
-    S.cleaners.forEach(c => {
+    S.allCleaners.filter(c => c.active || payFor(c.id, month).length || expFor(c.id, month).length).forEach(c => {
       const rows = payFor(c.id, month); const fee = rows.reduce((s, r) => s + r.amount, 0);
       const reimb = expFor(c.id, month, 'approved').reduce((s, e) => s + e.amount, 0);
       const pend = expFor(c.id, month, 'pending').length;
@@ -1393,13 +1589,13 @@
       const rtd = el('td', 'num', yen(reimb)); if (pend) { rtd.append(el('div', 'note', '確認待ち ' + pend + '件')); }
       const ctd = el('td', null, S.confirms[c.id + '|' + month] ? '✓ ' + S.confirms[c.id + '|' + month] : month >= THIS_MONTH ? '翌月1日から' : fee + reimb > 0 ? '未確認' : '—');
       const btd = el('td'); const b = el('button', 'btn ghost small', '明細書'); b.type = 'button'; b.onclick = () => { UI.stmt = c.id; render(); }; btd.append(b);
-      tr.append(el('td', null, c.name), el('td', 'num', rows.length + '回'), el('td', 'num', yen(fee)), rtd, el('td', 'num', yen(fee + reimb)), ctd, btd);
+      tr.append(el('td', null, c.name + (c.active ? '' : '(休止中)')), el('td', 'num', rows.length + '回'), el('td', 'num', yen(fee)), rtd, el('td', 'num', yen(fee + reimb)), ctd, btd);
       body.append(tr);
     });
     const tr = el('tr'); const td = el('td', null, '合計'); td.style.fontWeight = '700'; const tdv = el('td', 'num', yen(all)); tdv.style.fontWeight = '700';
     tr.append(td, el('td'), el('td'), el('td'), tdv, el('td'), el('td')); body.append(tr);
     tb.append(thead, body); tw.append(tb); card.append(tw);
-    card.append(el('div', 'note', '清掃員の「本人確認」は、翌月1日から押せます。清掃料は施設ごとの固定額で、2名で入った清掃は半額ずつです。緊急対応などで金額を変えるときは、「明細書」の各行の「金額を変更」から変えられます。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
+    card.append(el('div', 'note', '清掃員の「本人確認」は、翌月1日から押せます。清掃料は施設ごとの固定額(清掃が完了した時点の金額で記録)で、2名で入った清掃は半額ずつです。緊急対応などで金額を変えるときは、「明細書」の各行の「金額を変更」から変えられます。立替精算は「承認済み」の分だけを含めます。「明細書」から、経費処理のエビデンス用の支払明細書を表示できます。'));
     return card;
   }
   function feeCell(r, cid, month) {
@@ -1480,7 +1676,7 @@
     s.append(el('h3', null, '1. 清掃料の明細(' + rows.length + '件)'));
     const t1 = el('table'); const h1 = el('tr'); ['日付', '施設', '開始', '完了', '単価', '人数', '金額'].forEach((x, i) => h1.append(el('th', i >= 4 ? 'num' : null, x)));
     const th1 = el('thead'); th1.append(h1); const b1 = el('tbody');
-    rows.forEach(r => { const a = r.j.asg.find(x => x.c === cid); const tr = el('tr'); tr.append(el('td', null, jaDate(r.j.date)), el('td', null, r.j.prop), el('td', null, a.start || '—'), el('td', null, a.end || '—'), el('td', 'num', yen(prop(r.j.prop).rate)), el('td', 'num', r.half ? '2名(折半)' : '1名'), feeCell(r, cid, month)); b1.append(tr); });
+    rows.forEach(r => { const a = r.j.asg.find(x => x.c === cid); const tr = el('tr'); tr.append(el('td', null, jaDate(r.j.date)), el('td', null, r.j.prop), el('td', null, a.start || '—'), el('td', null, a.end || '—'), el('td', 'num', yen(r.rate)), el('td', 'num', r.half ? '2名(折半)' : '1名'), feeCell(r, cid, month)); b1.append(tr); });
     const f1 = el('tr'); const f1a = el('td', null, '小計'); f1a.colSpan = 6; f1a.style.fontWeight = '700'; const f1b = el('td', 'num', yen(fee)); f1b.style.fontWeight = '700'; f1.append(f1a, f1b); b1.append(f1);
     t1.append(th1, b1); const w1 = el('div', 'table-wrap'); w1.append(t1); s.append(w1);
     // reimbursement table

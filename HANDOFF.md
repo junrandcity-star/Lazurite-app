@@ -131,6 +131,23 @@
 - 未対応:`line-webhook` のボタン処理はまだ `_shared/actions.ts` に寄せていない(同じ内容を2か所に持っている)。
 - 本番に移すとき:本番用の LIFF(または同じ LIFF のエンドポイントを本番の staff.html に)、`cleaning_dispatch.setup_url`、本番の公式アカウントで `line-setup {action:'richmenu'}` を実行、メニューの URL を本番の LIFF に。
 
+### 2026-11-26 イレギュラー対応(オーナーと運用テストのドキュメントで決定)
+- 決定の記録:Claude Docs「清掃アプリ 運用テスト(イレギュラー対応)」(オーナーのコメント入り)。マイグレーション `20261126_irregular.sql`(試験環境に適用済み)。
+- 施設ごとの「清掃にかかる時間」`property_cleaning.duration_min`(既定120分)。選べる開始時間はチェックアウト〜「チェックイン − この時間」。画面:設定 → 施設と担当。`timeChoices(out, in, dur)`。
+- 清掃料は完了時の単価で固定:`cleaning_assignments.rate_at_done`(トリガー `cleaning_fix_rate` が done になったときに入れる。done 以外に戻すと空)。既存の完了分は 11/26 の単価で埋めた。
+- 清掃員は削除ではなく「休止」(`cleaners.active=false`)。今後の依頼は取り消して本人に cancel を送る。記録は残り、支払いの一覧に「(休止中)」で出る。再開できる。画面からの削除はなくした。
+- 報告(メモ+写真30枚まで):`cleaning_reports`。清掃員アプリは staff-api `report_url` / `report`(清掃日〜2日後、自分の清掃だけ、写真は `reports/{清掃員ID}/` だけ)。写真は長い辺1280px。オーナーへ【報告】。オーナーは清掃カードの「清掃員からの報告」で写真を見る(署名付き URL)。写真は30日後に Edge Function `cleaning-cleanup` が削除(pg_cron `cleaning-cleanup` 毎日03:30 → `cleaning_cleanup_call()` → `cleaning_dispatch.cleanup_url`)。メモは残る。
+- 見守り `cleaning_watch()`(pg_cron 10分ごと)→ オーナーへ LINE:【返事なし】清掃日が今日・明日で返事待ち(8〜21時、1回)/【未開始】予定+30分/【未完了】開始+3時間。
+- 前日18:00 `cleaning_evening()` → OK 済みの清掃員へ「明日の清掃」(kind `tomorrow`、「行けない」ボタン付き)。
+- 当日の「行けない」はオーナーへ【至急・要対応】、清掃員には「LINE の電話ですぐオーナーへ」と表示(`cantText`、`urgentCall`)。OK 済みの予定にも「行けなくなった」ボタン(アプリ)。
+- 清掃員がブロックしたらオーナーへ【連携解除】(line-webhook unfollow)。
+- LINE で送れなかったお知らせ(send_status failed、7日以内)をオーナー画面の通知欄に常に表示。上限超え(429 / monthly limit)はその旨を表示。
+- フォロー欄に「担当なし」の清掃(誰にも依頼していない)も出す。
+- 清掃員のガイドに「使い方」(5か国語、`HOWTO`)。
+- 依頼を送る日数の選択肢に14日・21日を追加(運用は30日のまま、オーナー決定)。
+- 配置の注意:staff-api と line-webhook は `_shared/line.ts` の必要部分だけを一緒にアップロードした(line-send は全体)。リポジトリの `_shared/line.ts` が正。
+- 動作確認:`tools/linetest/run.mjs`・`run_staff.mjs`(前日のお知らせ・ブロック・所要時間・当日の行けない・報告を追加)。
+
 ### 2026-11-20 ログインの注意
 - 新規登録が無効のため、招待メールを期限内(24時間)に開かなかったアカウントは「Waiting for verification」のまま残り、「Send confirmation email」もログイン用メールも「Signups not allowed」で断られる。
 - 対処:オーナーの了承のうえで `auth.users.email_confirmed_at` を設定して確認済みにする(試験環境の2人目のアカウントはこの方法で 11/20 に確認済みにした)。または削除して招待し直し、24時間以内にリンクを開いてもらう。

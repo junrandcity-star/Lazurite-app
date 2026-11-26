@@ -370,3 +370,18 @@ td .members { font-weight: 500; margin-bottom: 2px; }
 .line-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .line-mark { background: #06c755; color: #fff; font-weight: 700; font-size: .72rem; border-radius: 6px; padding: 2px 7px; letter-spacing: .03em; }
 .line-code { font-size: 1.15rem; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+
+/* 2026-11-26: LINE send failures, reports, how-to page */
+.ntc-body.fail { background: var(--bad-soft); }
+.ntc-body.fail .h { font-weight: 700; color: var(--bad); }
+.ntc-row .tx { white-space: pre-wrap; }
+.rep-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.rep-photos img, .rep-photos a { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; background: var(--line); }
+.rep-item { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rep-item .tx { white-space: pre-wrap; }
+.sheet textarea { width: 100%; min-height: 96px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; background: var(--bg); color: var(--fg); box-sizing: border-box; }
+.urgent-note { background: var(--bad-soft); color: var(--bad); border-radius: 10px; padding: 10px 12px; font-weight: 700; }
+.howto { display: flex; flex-direction: column; gap: 10px; }
+.howto h4 { margin: 0 0 4px; }
+.howto ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.rep-done { font-size: .85rem; color: var(--done); }
