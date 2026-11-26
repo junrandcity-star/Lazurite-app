@@ -302,11 +302,11 @@
   };
   Object.keys(T7).forEach(k => Object.assign(T[k], T7[k]));
   const T8 = {
-    ja: { cantLater: '行けなくなった', urgentCall: '今日の清掃です。LINE の電話で、すぐにオーナーに知らせてください。', report: '報告する(メモ・写真)', repHint: '気づいたこと(故障・汚れ・忘れ物・足りない備品など)と写真を送れます。', repPh: '例:浴室の電球が切れています', repAdd: '写真を追加', repUp: '写真を送っています', repKeep: '写真は30日後に自動で消えます。', repSend: '送る', repSent: '報告済み', howto: '使い方' },
-    en: { cantLater: "I can't go anymore", urgentCall: 'This cleaning is today. Please call the owner on LINE right away.', report: 'Report (memo / photos)', repHint: 'Send what you noticed (broken items, stains, things guests left, missing supplies) with photos.', repPh: 'e.g. The bathroom light bulb is broken', repAdd: 'Add photos', repUp: 'Sending photos', repKeep: 'Photos are deleted automatically after 30 days.', repSend: 'Send', repSent: 'Reported', howto: 'How to use' },
-    th: { cantLater: 'ไปไม่ได้แล้ว', urgentCall: 'งานนี้คือวันนี้ กรุณาโทรหาเจ้าของทาง LINE ทันที', report: 'รายงาน (บันทึก・รูป)', repHint: 'ส่งสิ่งที่พบ (ของเสีย รอยเปื้อน ของที่แขกลืม ของใช้ที่ขาด) พร้อมรูปได้', repPh: 'เช่น หลอดไฟในห้องน้ำขาด', repAdd: 'เพิ่มรูป', repUp: 'กำลังส่งรูป', repKeep: 'รูปจะถูกลบอัตโนมัติหลัง 30 วัน', repSend: 'ส่ง', repSent: 'รายงานแล้ว', howto: 'วิธีใช้' },
-    ne: { cantLater: 'अब आउन सक्दिन', urgentCall: 'यो सरसफाइ आजै हो। कृपया तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', report: 'रिपोर्ट (नोट・फोटो)', repHint: 'देखेका कुरा (बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान, नपुगेका सामान) फोटोसहित पठाउन सकिन्छ।', repPh: 'जस्तै: बाथरुमको बत्ती बिग्रिएको छ', repAdd: 'फोटो थप्नुहोस्', repUp: 'फोटो पठाउँदै', repKeep: 'फोटो ३० दिनपछि आफैं मेटिन्छ।', repSend: 'पठाउनुहोस्', repSent: 'रिपोर्ट गरियो', howto: 'प्रयोग विधि' },
-    vi: { cantLater: 'Không đi được nữa', urgentCall: 'Lịch dọn này là hôm nay. Hãy gọi ngay cho chủ nhà qua LINE.', report: 'Báo cáo (ghi chú・ảnh)', repHint: 'Gửi những gì bạn thấy (đồ hỏng, vết bẩn, đồ khách để quên, đồ dùng bị thiếu) kèm ảnh.', repPh: 'Ví dụ: Bóng đèn phòng tắm bị hỏng', repAdd: 'Thêm ảnh', repUp: 'Đang gửi ảnh', repKeep: 'Ảnh sẽ tự động bị xóa sau 30 ngày.', repSend: 'Gửi', repSent: 'Đã báo cáo', howto: 'Cách dùng' },
+    ja: { cantLater: '行けなくなった', urgentCall: '今日の清掃です。LINE の電話で、すぐにオーナーに知らせてください。', report: '報告する(メモ・写真)', repHint: '気づいたこと(故障・汚れ・忘れ物・足りない備品など)と写真を送れます。', repPh: '例:浴室の電球が切れています', repAdd: '写真を追加', repCam: 'カメラで撮る', repLib: '写真を選ぶ', repUp: '写真を送っています', repKeep: '写真は30日後に自動で消えます。', repSend: '送る', repSent: '報告済み', howto: '使い方' },
+    en: { cantLater: "I can't go anymore", urgentCall: 'This cleaning is today. Please call the owner on LINE right away.', report: 'Report (memo / photos)', repHint: 'Send what you noticed (broken items, stains, things guests left, missing supplies) with photos.', repPh: 'e.g. The bathroom light bulb is broken', repAdd: 'Add photos', repCam: 'Take a photo', repLib: 'Choose photos', repUp: 'Sending photos', repKeep: 'Photos are deleted automatically after 30 days.', repSend: 'Send', repSent: 'Reported', howto: 'How to use' },
+    th: { cantLater: 'ไปไม่ได้แล้ว', urgentCall: 'งานนี้คือวันนี้ กรุณาโทรหาเจ้าของทาง LINE ทันที', report: 'รายงาน (บันทึก・รูป)', repHint: 'ส่งสิ่งที่พบ (ของเสีย รอยเปื้อน ของที่แขกลืม ของใช้ที่ขาด) พร้อมรูปได้', repPh: 'เช่น หลอดไฟในห้องน้ำขาด', repAdd: 'เพิ่มรูป', repCam: 'ถ่ายรูป', repLib: 'เลือกรูป', repUp: 'กำลังส่งรูป', repKeep: 'รูปจะถูกลบอัตโนมัติหลัง 30 วัน', repSend: 'ส่ง', repSent: 'รายงานแล้ว', howto: 'วิธีใช้' },
+    ne: { cantLater: 'अब आउन सक्दिन', urgentCall: 'यो सरसफाइ आजै हो। कृपया तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', report: 'रिपोर्ट (नोट・फोटो)', repHint: 'देखेका कुरा (बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान, नपुगेका सामान) फोटोसहित पठाउन सकिन्छ।', repPh: 'जस्तै: बाथरुमको बत्ती बिग्रिएको छ', repAdd: 'फोटो थप्नुहोस्', repCam: 'फोटो खिच्नुहोस्', repLib: 'फोटो छान्नुहोस्', repUp: 'फोटो पठाउँदै', repKeep: 'फोटो ३० दिनपछि आफैं मेटिन्छ।', repSend: 'पठाउनुहोस्', repSent: 'रिपोर्ट गरियो', howto: 'प्रयोग विधि' },
+    vi: { cantLater: 'Không đi được nữa', urgentCall: 'Lịch dọn này là hôm nay. Hãy gọi ngay cho chủ nhà qua LINE.', report: 'Báo cáo (ghi chú・ảnh)', repHint: 'Gửi những gì bạn thấy (đồ hỏng, vết bẩn, đồ khách để quên, đồ dùng bị thiếu) kèm ảnh.', repPh: 'Ví dụ: Bóng đèn phòng tắm bị hỏng', repAdd: 'Thêm ảnh', repCam: 'Chụp ảnh', repLib: 'Chọn ảnh', repUp: 'Đang gửi ảnh', repKeep: 'Ảnh sẽ tự động bị xóa sau 30 ngày.', repSend: 'Gửi', repSent: 'Đã báo cáo', howto: 'Cách dùng' },
   };
   Object.keys(T8).forEach(k => Object.assign(T[k], T8[k]));
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
@@ -536,9 +536,14 @@
       const grid = el('div', 'rep-photos');
       st.photos.forEach((ph, i) => { const im = el('img'); im.src = ph.url; im.alt = String(i + 1); grid.append(im); });
       sh.append(grid);
-      const pick = el('label', 'btn ghost'); pick.append(document.createTextNode(t('repAdd') + ' (' + st.photos.length + '/30)'));
-      const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.multiple = true; file.hidden = true;
-      file.onchange = async () => {
+      // two ways: take a photo with the camera, or choose photos already taken
+      const mkPick = (label, camera) => {
+        const lb = el('label', 'btn ghost'); lb.append(document.createTextNode(label));
+        const f = el('input'); f.type = 'file'; f.accept = 'image/*'; f.hidden = true;
+        if (camera) f.setAttribute('capture', 'environment'); else f.multiple = true;
+        f.onchange = () => addFiles(f); lb.append(f); return lb;
+      };
+      const addFiles = async (file) => {
         const files = [...(file.files || [])].slice(0, 30 - st.photos.length);
         for (let i = 0; i < files.length; i++) {
           st.body = ta.value; st.busy = t('repUp') + ' ' + (i + 1) + '/' + files.length; render();
@@ -547,8 +552,11 @@
         }
         st.busy = ''; render();
       };
-      pick.append(file);
-      if (!st.busy && st.photos.length < 30) sh.append(pick);
+      if (!st.busy && st.photos.length < 30) {
+        const pr = el('div', 'row');
+        pr.append(mkPick('📷 ' + t('repCam'), true), mkPick('🖼 ' + t('repLib') + ' (' + st.photos.length + '/30)', false));
+        sh.append(pr);
+      }
       if (st.busy) sh.append(el('div', 'note', st.busy));
       sh.append(el('div', 'note', t('repKeep')));
       const row = el('div', 'row');
@@ -682,9 +690,11 @@
     const HT = '__howto';
     if (UI.gprop !== HT && !mine.some(p => p.name === UI.gprop)) UI.gprop = mine.length ? mine[0].name : HT;
     const bar = el('div', 'g-props');
+    mine.forEach(p => { const b = el('button', null, p.name); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.gprop === p.name)); b.onclick = () => { UI.gprop = p.name; render(); }; bar.append(b); });
+    // "How to use" stays next to the property buttons
     { const b = el('button', null, '? ' + t('howto')); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.gprop === HT)); b.onclick = () => { UI.gprop = HT; render(); }; bar.append(b); }
     if (UI.gprop === HT) { out.push(bar, howtoView()); return out; }
-    mine.forEach(p => { const b = el('button', null, p.name); b.type = 'button'; b.setAttribute('aria-pressed', String(UI.gprop === p.name)); b.onclick = () => { UI.gprop = p.name; render(); }; bar.append(b); });
+    if (!mine.length) return [bar, el('div', 'empty', t('empty'))];
     out.push(bar, el('div', 'g-hint', t('hint')));
     S.guide[UI.gprop].forEach(ar => {
       const c = el('article', 'card area');
