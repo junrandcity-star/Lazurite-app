@@ -38,12 +38,12 @@ async function sendToCleaner(m: Msg) {
       lines.push(tr("todayText", lang));
       msg = bubble(tr("todayTitle", lang), lines, [{ label: tr("btnStart", lang), data: pb("start", j.reservationId, m.cleaner_id!), primary: true }]);
     } else if (m.kind === "tomorrow") {
-      // 18:00 the day before: a reminder, with a button for "I can't go after all"
+      // 18:00 the day before: a reminder only (no "can't go" button: the owner does not want easy last-minute cancels)
       if (st !== "ok") return mark(m.id, "stale");
       const lines = jobLines(j, lang);
       if (j.asg.plan_time) lines.push(tr("plan", lang, { t: j.asg.plan_time }));
       lines.push(tr("tomorrowText", lang));
-      msg = bubble(tr("tomorrowTitle", lang), lines, [{ label: tr("btnCant", lang), data: pb("cant", j.reservationId, m.cleaner_id!) }]);
+      msg = bubble(tr("tomorrowTitle", lang), lines, []);
     } else {
       return mark(m.id, "unknown_kind");
     }

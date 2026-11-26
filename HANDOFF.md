@@ -138,7 +138,7 @@
 - 清掃員は削除ではなく「休止」(`cleaners.active=false`)。今後の依頼は取り消して本人に cancel を送る。記録は残り、支払いの一覧に「(休止中)」で出る。再開できる。画面からの削除はなくした。
 - 報告(メモ+写真30枚まで):`cleaning_reports`。清掃員アプリは staff-api `report_url` / `report`(清掃日〜2日後、自分の清掃だけ、写真は `reports/{清掃員ID}/` だけ)。写真は長い辺1280px。オーナーへ【報告】。オーナーは清掃カードの「清掃員からの報告」で写真を見る(署名付き URL)。写真は30日後に Edge Function `cleaning-cleanup` が削除(pg_cron `cleaning-cleanup` 毎日03:30 → `cleaning_cleanup_call()` → `cleaning_dispatch.cleanup_url`)。メモは残る。
 - 見守り `cleaning_watch()`(pg_cron 10分ごと)→ オーナーへ LINE:【返事なし】清掃日が今日・明日で返事待ち(8〜21時、1回)/【未開始】予定+30分/【未完了】開始+3時間。
-- 前日18:00 `cleaning_evening()` → OK 済みの清掃員へ「明日の清掃」(kind `tomorrow`、「行けない」ボタン付き)。
+- 前日18:00 `cleaning_evening()` → OK 済みの清掃員へ「明日の清掃」(kind `tomorrow`)。安易な前日キャンセルを防ぐため「行けない」ボタンは付けない(11/26 オーナー決定)。line-send も `_shared/line.ts` の必要部分だけで配置。
 - 当日の「行けない」はオーナーへ【至急・要対応】、清掃員には「LINE の電話ですぐオーナーへ」と表示(`cantText`、`urgentCall`)。OK 済みの予定にも「行けなくなった」ボタン(アプリ)。
 - 清掃員がブロックしたらオーナーへ【連携解除】(line-webhook unfollow)。
 - LINE で送れなかったお知らせ(send_status failed、7日以内)をオーナー画面の通知欄に常に表示。上限超え(429 / monthly limit)はその旨を表示。

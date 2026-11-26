@@ -93,7 +93,7 @@ for (const lang of ['ja', 'en', 'ne', 'vi']) {
 DB.cleaners[0].lang = 'ja'; asg(1, C1).status = 'ok'; asg(1, C1).plan_time = '10:30';
 DB.cleaning_messages.push({ id: 400, audience: 'cleaner', cleaner_id: C1, reservation_id: 1, kind: 'tomorrow', body: 'x', delivered_at: null });
 await H.dispatch(); show(' tomorrow');
-check(JSON.stringify(H.lastLine().body).includes('a=cant&r=1'), 'tomorrow has the cant button');
+check(!JSON.stringify(H.lastLine().body).includes('a=cant'), 'tomorrow has no cant button');
 asg(1, C1).status = 'wait';
 DB.cleaning_messages.push({ id: 401, audience: 'cleaner', cleaner_id: C1, reservation_id: 1, kind: 'tomorrow', body: 'x', delivered_at: null });
 await H.dispatch(); check(DB.cleaning_messages.find((m) => m.id === 401).send_status === 'stale', 'tomorrow not sent when not accepted');
