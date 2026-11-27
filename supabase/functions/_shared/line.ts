@@ -125,7 +125,7 @@ export function bubble(title: string, lines: string[], buttons: Btn[], color = "
     contents.footer = {
       type: "box", layout: "vertical", spacing: "sm",
       contents: buttons.map((b) => ({
-        type: "button", style: b.primary ? "primary" : "secondary", height: "sm", color: b.primary ? "#1d4f91" : undefined,
+        type: "button", style: "primary", height: "sm", color: "#1d4f91", // all buttons the same color: grey looked disabled
         action: b.uri ? { type: "uri", label: b.label.slice(0, 40), uri: b.uri } : { type: "postback", label: b.label.slice(0, 40), data: b.data, displayText: b.label },
       })),
     };
