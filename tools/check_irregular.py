@@ -38,13 +38,13 @@ with sync_playwright() as p:
     pg.set_viewport_size({'width': 400, 'height': 900})
     pg.locator('#v-cleaner').click(); pg.wait_for_timeout(300)
     pg.locator('.ctabs button').nth(0).click(); pg.wait_for_timeout(200)
-    print('today cards:', pg.locator('.job').count(), '| cantLater:', pg.locator('.job .linkbtn.del').count(), '| report btn:', pg.get_by_role('button', name=re.compile('รายงาน')).count())
+    print('today cards:', pg.locator('.job').count(), '| cantLater:', pg.locator('.job .linkbtn.del').count(), '| before btn:', pg.get_by_role('button', name=re.compile('ส่งรูปก่อน')).count(), '| report btn:', pg.get_by_role('button', name=re.compile('รายงาน')).count())
     # time choices for today's job (Pear Field 2h default): edit
     pg.locator('.job .planned button').first.click(); pg.wait_for_timeout(200)
     print('time choices Pear Field:', pg.locator('.times button').all_inner_texts())
     pg.get_by_role('button', name='ยกเลิก').click()
     # report
-    pg.get_by_role('button', name=re.compile('รายงาน')).click(); pg.wait_for_timeout(200)
+    pg.get_by_role('button', name=re.compile('ส่งรูปก่อน')).first.click(); pg.wait_for_timeout(200)
     pg.locator('.sheet textarea').fill('浴室の電球が切れています')
     print('pickers:', pg.locator('.sheet label.btn').all_inner_texts(), '| capture:', pg.locator('.sheet input[capture]').count(), '| multiple:', pg.locator('.sheet input[multiple]').count())
     pg.locator('.sheet input[capture]').set_input_files([out + '/p.png'])
@@ -54,7 +54,7 @@ with sync_playwright() as p:
     print('thumbs:', pg.locator('.sheet .rep-photos img').count())
     pg.screenshot(path=out + '/3-report.png', full_page=False)
     pg.locator('.sheet .big-ok').click(); pg.wait_for_timeout(400)
-    print('reports in db:', pg.evaluate('JSON.stringify(__DB.cleaning_reports.map(r => [r.body, r.photos.length, r.photos[0].split("/")[0]]))'))
+    print('reports in db:', pg.evaluate('JSON.stringify(__DB.cleaning_reports.map(r => [r.kind, r.body, r.photos.length]))'))
     print('owner notice:', pg.evaluate('__DB.cleaning_messages.filter(m => m.kind === "report").map(m => m.body).join()'))
     # can't go after OK, same day
     pg.locator('.job .linkbtn.del').first.click(); pg.wait_for_timeout(200)

@@ -8,6 +8,8 @@ export const asLang = (l: unknown): Lang => (LANGS.includes(l as Lang) ? (l as L
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 export const LINE_TOKEN = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN") ?? "";
+// the cleaner app inside LINE (LIFF). Production: set the Secret LIFF_URL
+export const LIFF_URL = Deno.env.get("LIFF_URL") ?? "https://liff.line.me/2012785420-TTEQZ4p7";
 
 export const T: Record<string, Record<Lang, string>> = {
   reqTitle: { ja: "清掃のお願い", en: "Cleaning request", th: "ขอให้ทำความสะอาด", ne: "सरसफाइ अनुरोध", vi: "Yêu cầu dọn dẹp" },
@@ -25,6 +27,10 @@ export const T: Record<string, Record<Lang, string>> = {
   plan: { ja: "予定 {t} から", en: "Planned from {t}", th: "เริ่ม {t}", ne: "{t} बजेदेखि", vi: "Dự kiến từ {t}" },
   btnOk: { ja: "OK(時間を選ぶ)", en: "OK (choose time)", th: "ตกลง (เลือกเวลา)", ne: "ठीक छ (समय छान्नुहोस्)", vi: "OK (chọn giờ)" },
   btnCant: { ja: "行けない", en: "I can't go", th: "ไปไม่ได้", ne: "जान सक्दिनँ", vi: "Không đi được" },
+  startTitle: { ja: "本日の清掃開始", en: "Today's cleaning: start", th: "เริ่มงานทำความสะอาดวันนี้", ne: "आजको सरसफाइ सुरु", vi: "Bắt đầu dọn hôm nay" },
+  doneTitle: { ja: "本日の清掃完了", en: "Today's cleaning: finish", th: "จบงานทำความสะอาดวันนี้", ne: "आजको सरसफाइ समाप्त", vi: "Hoàn thành dọn hôm nay" },
+  btnBefore: { ja: "Beforeの写真を送る", en: "Send \"before\" photos", th: "ส่งรูปก่อนทำความสะอาด", ne: "सरसफाइ अघिको फोटो पठाउनुहोस्", vi: "Gửi ảnh trước khi dọn" },
+  btnReport: { ja: "報告する(メモ・写真)", en: "Report (memo / photos)", th: "รายงาน (บันทึก・รูป)", ne: "रिपोर्ट (नोट・फोटो)", vi: "Báo cáo (ghi chú・ảnh)" },
   btnStart: { ja: "清掃を始める", en: "Start cleaning", th: "เริ่มทำความสะอาด", ne: "सरसफाइ सुरु", vi: "Bắt đầu dọn" },
   btnDone: { ja: "清掃が終わった", en: "Finished cleaning", th: "ทำความสะอาดเสร็จแล้ว", ne: "सरसफाइ सकियो", vi: "Đã dọn xong" },
   pickTime: { ja: "何時から入りますか?下から選んでください。", en: "What time will you start? Please choose below.", th: "จะเริ่มกี่โมง? กรุณาเลือกด้านล่าง", ne: "कति बजे सुरु गर्नुहुन्छ? तल छान्नुहोस्।", vi: "Bạn sẽ bắt đầu lúc mấy giờ? Hãy chọn bên dưới." },
@@ -103,7 +109,7 @@ export async function loadJob(reservationId: number, cleanerId: string): Promise
 }
 
 // ---------- messages ----------
-type Btn = { label: string; data: string; primary?: boolean };
+type Btn = { label: string; data?: string; uri?: string; primary?: boolean };
 export function bubble(title: string, lines: string[], buttons: Btn[], color = "#1d4f91") {
   const contents: Record<string, unknown> = {
     type: "bubble",
@@ -120,7 +126,7 @@ export function bubble(title: string, lines: string[], buttons: Btn[], color = "
       type: "box", layout: "vertical", spacing: "sm",
       contents: buttons.map((b) => ({
         type: "button", style: b.primary ? "primary" : "secondary", height: "sm", color: b.primary ? "#1d4f91" : undefined,
-        action: { type: "postback", label: b.label.slice(0, 40), data: b.data, displayText: b.label },
+        action: b.uri ? { type: "uri", label: b.label.slice(0, 40), uri: b.uri } : { type: "postback", label: b.label.slice(0, 40), data: b.data, displayText: b.label },
       })),
     };
   }
@@ -137,6 +143,17 @@ export function jobLines(j: Job, lang: Lang) {
   return lines;
 }
 export const pb = (a: string, r: number, c: string, extra = "") => "a=" + a + "&r=" + r + "&c=" + c + extra;
+// opens the cleaner app on the report screen of this cleaning ("before" photos or the report after cleaning)
+export const reportUri = (r: number, kind: "before" | "after") => LIFF_URL + "?tab=today&report=" + kind + "&r=" + r;
+// the cleaning day: "start" card (start button + before photos) and "finish" card (report + finish button)
+export function startBubble(date: string, prop: string, plan: string | null, r: number, c: string, lang: Lang) {
+  return bubble(tr("startTitle", lang), [dateLabel(date, lang) + " " + prop, plan ? tr("plan", lang, { t: plan }) : "", tr("todayText", lang)],
+    [{ label: tr("btnStart", lang), data: pb("start", r, c), primary: true }, { label: tr("btnBefore", lang), uri: reportUri(r, "before") }]);
+}
+export function finishBubble(date: string, prop: string, startedAt: string, r: number, c: string, lang: Lang) {
+  return bubble(tr("doneTitle", lang), [dateLabel(date, lang) + " " + prop, tr("gotStart", lang, { t: startedAt })],
+    [{ label: tr("btnReport", lang), uri: reportUri(r, "after") }, { label: tr("btnDone", lang), data: pb("done", r, c), primary: true }]);
+}
 export const replyButtons = (j: Job, c: string, lang: Lang): Btn[] => [
   { label: tr("btnOk", lang), data: pb("ok", j.reservationId, c), primary: true },
   { label: tr("btnCant", lang), data: pb("cant", j.reservationId, c) },

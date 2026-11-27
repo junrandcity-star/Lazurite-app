@@ -131,7 +131,7 @@
       let next = null;
       byProp[r.property_id].forEach(o => { if (o.id !== r.id && o.check_in >= r.check_out && (!next || o.check_in < next.check_in)) next = o; });
       return { id: r.id, prop: nameOf[r.property_id], date: r.check_out, nextIn: next ? next.check_in : null, guests: next ? next.guests : null, asg: asgBy[r.id] || [],
-        reports: reps.filter(x => x.reservation_id === r.id).map(x => ({ c: x.cleaner_id, body: x.body, photos: x.photos || [], removed: x.photos_removed, n: (x.photos || []).length, at: x.created_at })) };
+        reports: reps.filter(x => x.reservation_id === r.id).map(x => ({ c: x.cleaner_id, kind: x.kind || 'after', body: x.body, photos: x.photos || [], removed: x.photos_removed, n: (x.photos || []).length, at: x.created_at })) };
     }).sort((a, b) => a.date.localeCompare(b.date) || a.prop.localeCompare(b.prop));
     st.guide = {};
     props.forEach(p => { st.guide[p.name] = []; });
@@ -302,11 +302,11 @@
   };
   Object.keys(T7).forEach(k => Object.assign(T[k], T7[k]));
   const T8 = {
-    ja: { cantLater: '行けなくなった', urgentCall: '今日の清掃です。LINE の電話で、すぐにオーナーに知らせてください。', report: '報告する(メモ・写真)', repHint: '気づいたこと(故障・汚れ・忘れ物・足りない備品など)と写真を送れます。', repPh: '例:浴室の電球が切れています', repAdd: '写真を追加', repCam: 'カメラで撮る', repLib: '写真を選ぶ', repUp: '写真を送っています', repKeep: '写真は30日後に自動で消えます。', repSend: '送る', repSent: '報告済み', howto: '使い方' },
-    en: { cantLater: "I can't go anymore", urgentCall: 'This cleaning is today. Please call the owner on LINE right away.', report: 'Report (memo / photos)', repHint: 'Send what you noticed (broken items, stains, things guests left, missing supplies) with photos.', repPh: 'e.g. The bathroom light bulb is broken', repAdd: 'Add photos', repCam: 'Take a photo', repLib: 'Choose photos', repUp: 'Sending photos', repKeep: 'Photos are deleted automatically after 30 days.', repSend: 'Send', repSent: 'Reported', howto: 'How to use' },
-    th: { cantLater: 'ไปไม่ได้แล้ว', urgentCall: 'งานนี้คือวันนี้ กรุณาโทรหาเจ้าของทาง LINE ทันที', report: 'รายงาน (บันทึก・รูป)', repHint: 'ส่งสิ่งที่พบ (ของเสีย รอยเปื้อน ของที่แขกลืม ของใช้ที่ขาด) พร้อมรูปได้', repPh: 'เช่น หลอดไฟในห้องน้ำขาด', repAdd: 'เพิ่มรูป', repCam: 'ถ่ายรูป', repLib: 'เลือกรูป', repUp: 'กำลังส่งรูป', repKeep: 'รูปจะถูกลบอัตโนมัติหลัง 30 วัน', repSend: 'ส่ง', repSent: 'รายงานแล้ว', howto: 'วิธีใช้' },
-    ne: { cantLater: 'अब आउन सक्दिन', urgentCall: 'यो सरसफाइ आजै हो। कृपया तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', report: 'रिपोर्ट (नोट・फोटो)', repHint: 'देखेका कुरा (बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान, नपुगेका सामान) फोटोसहित पठाउन सकिन्छ।', repPh: 'जस्तै: बाथरुमको बत्ती बिग्रिएको छ', repAdd: 'फोटो थप्नुहोस्', repCam: 'फोटो खिच्नुहोस्', repLib: 'फोटो छान्नुहोस्', repUp: 'फोटो पठाउँदै', repKeep: 'फोटो ३० दिनपछि आफैं मेटिन्छ।', repSend: 'पठाउनुहोस्', repSent: 'रिपोर्ट गरियो', howto: 'प्रयोग विधि' },
-    vi: { cantLater: 'Không đi được nữa', urgentCall: 'Lịch dọn này là hôm nay. Hãy gọi ngay cho chủ nhà qua LINE.', report: 'Báo cáo (ghi chú・ảnh)', repHint: 'Gửi những gì bạn thấy (đồ hỏng, vết bẩn, đồ khách để quên, đồ dùng bị thiếu) kèm ảnh.', repPh: 'Ví dụ: Bóng đèn phòng tắm bị hỏng', repAdd: 'Thêm ảnh', repCam: 'Chụp ảnh', repLib: 'Chọn ảnh', repUp: 'Đang gửi ảnh', repKeep: 'Ảnh sẽ tự động bị xóa sau 30 ngày.', repSend: 'Gửi', repSent: 'Đã báo cáo', howto: 'Cách dùng' },
+    ja: { before: 'Beforeの写真を送る', befHint: '清掃を始める前の部屋の様子を、写真(10枚まで)とメモでオーナーに送れます。', befPh: '例:リビングにゴミが多く残っています', befSent: 'Before送信済み', cantLater: '行けなくなった', urgentCall: '今日の清掃です。LINE の電話で、すぐにオーナーに知らせてください。', report: '報告する(メモ・写真)', repHint: '気づいたこと(故障・汚れ・忘れ物・足りない備品など)と写真を送れます。', repPh: '例:浴室の電球が切れています', repAdd: '写真を追加', repCam: 'カメラで撮る', repLib: '写真を選ぶ', repUp: '写真を送っています', repKeep: '写真は30日後に自動で消えます。', repSend: '送る', repSent: '報告済み', howto: '使い方' },
+    en: { before: 'Send "before" photos', befHint: 'Send the owner photos (up to 10) and a memo of how the room looks before you start cleaning.', befPh: 'e.g. A lot of rubbish was left in the living room', befSent: 'Before photos sent', cantLater: "I can't go anymore", urgentCall: 'This cleaning is today. Please call the owner on LINE right away.', report: 'Report (memo / photos)', repHint: 'Send what you noticed (broken items, stains, things guests left, missing supplies) with photos.', repPh: 'e.g. The bathroom light bulb is broken', repAdd: 'Add photos', repCam: 'Take a photo', repLib: 'Choose photos', repUp: 'Sending photos', repKeep: 'Photos are deleted automatically after 30 days.', repSend: 'Send', repSent: 'Reported', howto: 'How to use' },
+    th: { before: 'ส่งรูปก่อนทำความสะอาด', befHint: 'ส่งรูป (สูงสุด 10 รูป) และบันทึกสภาพห้องก่อนเริ่มทำความสะอาดให้เจ้าของได้', befPh: 'เช่น มีขยะเหลือในห้องนั่งเล่นเยอะ', befSent: 'ส่งรูปก่อนทำแล้ว', cantLater: 'ไปไม่ได้แล้ว', urgentCall: 'งานนี้คือวันนี้ กรุณาโทรหาเจ้าของทาง LINE ทันที', report: 'รายงาน (บันทึก・รูป)', repHint: 'ส่งสิ่งที่พบ (ของเสีย รอยเปื้อน ของที่แขกลืม ของใช้ที่ขาด) พร้อมรูปได้', repPh: 'เช่น หลอดไฟในห้องน้ำขาด', repAdd: 'เพิ่มรูป', repCam: 'ถ่ายรูป', repLib: 'เลือกรูป', repUp: 'กำลังส่งรูป', repKeep: 'รูปจะถูกลบอัตโนมัติหลัง 30 วัน', repSend: 'ส่ง', repSent: 'รายงานแล้ว', howto: 'วิธีใช้' },
+    ne: { before: 'सरसफाइ अघिको फोटो पठाउनुहोस्', befHint: 'सरसफाइ सुरु गर्नुअघि कोठाको अवस्थाको फोटो (१० वटासम्म) र नोट मालिकलाई पठाउन सकिन्छ।', befPh: 'जस्तै: बैठक कोठामा धेरै फोहोर छोडिएको छ', befSent: 'अघिको फोटो पठाइयो', cantLater: 'अब आउन सक्दिन', urgentCall: 'यो सरसफाइ आजै हो। कृपया तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', report: 'रिपोर्ट (नोट・फोटो)', repHint: 'देखेका कुरा (बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान, नपुगेका सामान) फोटोसहित पठाउन सकिन्छ।', repPh: 'जस्तै: बाथरुमको बत्ती बिग्रिएको छ', repAdd: 'फोटो थप्नुहोस्', repCam: 'फोटो खिच्नुहोस्', repLib: 'फोटो छान्नुहोस्', repUp: 'फोटो पठाउँदै', repKeep: 'फोटो ३० दिनपछि आफैं मेटिन्छ।', repSend: 'पठाउनुहोस्', repSent: 'रिपोर्ट गरियो', howto: 'प्रयोग विधि' },
+    vi: { before: 'Gửi ảnh trước khi dọn', befHint: 'Gửi cho chủ nhà ảnh (tối đa 10 ảnh) và ghi chú về tình trạng phòng trước khi bắt đầu dọn.', befPh: 'Ví dụ: Phòng khách còn nhiều rác', befSent: 'Đã gửi ảnh trước khi dọn', cantLater: 'Không đi được nữa', urgentCall: 'Lịch dọn này là hôm nay. Hãy gọi ngay cho chủ nhà qua LINE.', report: 'Báo cáo (ghi chú・ảnh)', repHint: 'Gửi những gì bạn thấy (đồ hỏng, vết bẩn, đồ khách để quên, đồ dùng bị thiếu) kèm ảnh.', repPh: 'Ví dụ: Bóng đèn phòng tắm bị hỏng', repAdd: 'Thêm ảnh', repCam: 'Chụp ảnh', repLib: 'Chọn ảnh', repUp: 'Đang gửi ảnh', repKeep: 'Ảnh sẽ tự động bị xóa sau 30 ngày.', repSend: 'Gửi', repSent: 'Đã báo cáo', howto: 'Cách dùng' },
   };
   Object.keys(T8).forEach(k => Object.assign(T[k], T8[k]));
   const t = (k) => (T[UI.lang] && T[UI.lang][k] != null ? T[UI.lang][k] : T.ja[k]);
@@ -517,21 +517,29 @@
       c.append(b);
     }
     if (a.st === 'done') c.append(logLine(a));
-    // report (memo + photos) on the cleaning day and up to 2 days after
-    if (['ok', 'work', 'done'].includes(a.st) && j.date <= TODAY && j.date >= addDays(TODAY, -2)) {
-      const sent = (j.reports || []).filter(r => !r.c || r.c === UI.who);
-      if (sent.length) c.append(el('div', 'rep-done', '✓ ' + t('repSent') + ' ' + sent.length));
-      const rb = el('button', 'btn ghost', t('report')); rb.type = 'button'; rb.onclick = () => openReport(j); c.append(rb);
+    // "before" photos on the cleaning day (before or while cleaning), report after starting (up to 2 days after)
+    const mineR = (j.reports || []).filter(r => !r.c || r.c === UI.who);
+    if (['ok', 'work'].includes(a.st) && j.date === TODAY) {
+      const nb = mineR.filter(r => r.kind === 'before').length;
+      if (nb) c.append(el('div', 'rep-done', '✓ ' + t('befSent') + ' ' + nb));
+      const bb = el('button', 'btn ghost', '📷 ' + t('before')); bb.type = 'button'; bb.onclick = () => openReport(j, 'before'); c.append(bb);
+    }
+    if (['work', 'done'].includes(a.st) && j.date <= TODAY && j.date >= addDays(TODAY, -2)) {
+      const na = mineR.filter(r => r.kind !== 'before').length;
+      if (na) c.append(el('div', 'rep-done', '✓ ' + t('repSent') + ' ' + na));
+      const rb = el('button', 'btn ghost', t('report')); rb.type = 'button'; rb.onclick = () => openReport(j, 'after'); c.append(rb);
     }
     return c;
   }
-  function openReport(j) {
+  function openReport(j, kind) {
+    kind = kind === 'before' ? 'before' : 'after';
+    const MAX = kind === 'before' ? 10 : 30; // before: the room before cleaning
     const st = { body: '', photos: [], busy: '' };
     UI.sheet = () => {
       const bg = el('div', 'sheet-bg');
       const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
-      sh.append(el('h3', null, t('report')), el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang)), el('div', 'note', t('repHint')));
-      const ta = el('textarea'); ta.value = st.body; ta.placeholder = t('repPh'); ta.setAttribute('aria-label', t('report')); ta.maxLength = 1000; ta.oninput = () => { st.body = ta.value; };
+      sh.append(el('h3', null, kind === 'before' ? t('before') : t('report')), el('div', 'muted', j.prop + ' · ' + dateFmt(j.date, UI.lang)), el('div', 'note', kind === 'before' ? t('befHint') : t('repHint')));
+      const ta = el('textarea'); ta.value = st.body; ta.placeholder = kind === 'before' ? t('befPh') : t('repPh'); ta.setAttribute('aria-label', t('report')); ta.maxLength = 1000; ta.oninput = () => { st.body = ta.value; };
       sh.append(ta);
       const grid = el('div', 'rep-photos');
       st.photos.forEach((ph, i) => { const im = el('img'); im.src = ph.url; im.alt = String(i + 1); grid.append(im); });
@@ -544,7 +552,7 @@
         f.onchange = () => addFiles(f); lb.append(f); return lb;
       };
       const addFiles = async (file) => {
-        const files = [...(file.files || [])].slice(0, 30 - st.photos.length);
+        const files = [...(file.files || [])].slice(0, MAX - st.photos.length);
         for (let i = 0; i < files.length; i++) {
           st.body = ta.value; st.busy = t('repUp') + ' ' + (i + 1) + '/' + files.length; render();
           const up = await uploadPhoto(files[i], 'reports/' + UI.who, 1280, 'report_url');
@@ -552,9 +560,9 @@
         }
         st.busy = ''; render();
       };
-      if (!st.busy && st.photos.length < 30) {
+      if (!st.busy && st.photos.length < MAX) {
         const pr = el('div', 'row');
-        pr.append(mkPick('📷 ' + t('repCam'), true), mkPick('🖼 ' + t('repLib') + ' (' + st.photos.length + '/30)', false));
+        pr.append(mkPick('📷 ' + t('repCam'), true), mkPick('🖼 ' + t('repLib') + ' (' + st.photos.length + '/' + MAX + ')', false));
         sh.append(pr);
       }
       if (st.busy) sh.append(el('div', 'note', st.busy));
@@ -566,12 +574,12 @@
         st.body = ta.value.trim();
         if (!st.body && !st.photos.length) { ta.focus(); return; }
         const paths = st.photos.map(x => x.path);
-        if (STAFF) staffDo('report', { r: j.id, body: st.body, photos: paths });
+        if (STAFF) staffDo('report', { r: j.id, body: st.body, photos: paths, kind });
         else {
-          sb.from('cleaning_reports').insert({ reservation_id: j.id, cleaner_id: UI.who, body: st.body, photos: paths }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } });
-          notify('【報告】' + cl(UI.who).name + ' さん ' + jaDate(j.date) + ' ' + j.prop + (st.body ? '\n' + st.body : '') + (paths.length ? '\n(写真 ' + paths.length + '枚。アプリの清掃の詳細で見られます)' : ''), 'report');
+          sb.from('cleaning_reports').insert({ reservation_id: j.id, cleaner_id: UI.who, body: st.body, photos: paths, kind }).then(r => { if (r.error) { console.error(r.error); setSave('error'); } });
+          notify((kind === 'before' ? '【Before】' : '【報告】') + cl(UI.who).name + ' さん ' + jaDate(j.date) + ' ' + j.prop + (st.body ? '\n' + st.body : '') + (paths.length ? '\n(写真 ' + paths.length + '枚。アプリの清掃の詳細で見られます)' : ''), 'report');
         }
-        (j.reports = j.reports || []).push({ c: UI.who, body: st.body, photos: paths, n: paths.length, at: new Date().toISOString() });
+        (j.reports = j.reports || []).push({ c: UI.who, kind, body: st.body, photos: paths, n: paths.length, at: new Date().toISOString() });
         UI.sheet = null; render();
       };
       row.append(cancel, ok); sh.append(row); bg.append(sh); return bg;
@@ -634,7 +642,7 @@
       ['依頼が届いたら', ['LINE に「清掃のお願い」が届きます。「OK(時間を選ぶ)」で入る時間を選ぶか、「行けない」を押してください。', 'メニューの「予定」からも返事ができます。1日返事がないと、もう一度お知らせが届きます。']],
       ['予定が変わったとき', ['OK のあとで行けなくなったら、「予定」でその清掃の「行けなくなった」を押してください。オーナーに知らせが届きます。', '清掃の当日に行けなくなったときは、LINE の電話ですぐにオーナーに連絡してください。', '予約の日にちが変わると「日程が変わりました」が届きます。もう一度返事をしてください。']],
       ['清掃の日', ['前の日の18時に「明日の清掃」、当日の朝に「本日の清掃」が届きます。', '着いたら「清掃を始める」、終わったら「清掃が終わった」を押してください。オーナーに時刻が届きます。', '入る時間は、チェックアウトから「次のチェックイン − 清掃にかかる時間」までの中から選べます。']],
-      ['気づいたことの報告', ['故障・汚れ・忘れ物・足りない備品などは、その清掃の「報告する」から、メモと写真(30枚まで)で送れます。写真は30日後に消えます。']],
+      ['気づいたことの報告', ['故障・汚れ・忘れ物・足りない備品などは、その清掃の「報告する」から、メモと写真(30枚まで)で送れます。写真は30日後に消えます。', '清掃を始める前に、「Beforeの写真を送る」で部屋の様子(写真10枚まで)を送れます。']],
       ['ガイド', ['施設ごとに、清掃後の写真と注意点があります。「!」の付いた項目は特に気をつけてください。']],
       ['お給料・立替', ['「お給料」で月ごとの清掃料と立替を見られます。月が終わったら、翌月1日から「明細の内容を確認しました」を押してください。', '清掃のために買い物をしたときは、レシートを撮影して「立替を登録する」から送ってください。']],
       ['困ったとき', ['わからないことは、この LINE のトークに書くか、オーナーに電話してください。']],
@@ -643,7 +651,7 @@
       ['When a request arrives', ['A "Cleaning request" comes to LINE. Press "OK (choose time)" and pick your start time, or press "I can\'t go".', 'You can also reply from "Schedule" in the menu. If you do not reply for 1 day, a reminder is sent.']],
       ['When plans change', ['If you can no longer go after pressing OK, open the cleaning in "Schedule" and press "I can\'t go anymore". The owner is notified.', 'If you cannot go on the cleaning day itself, call the owner on LINE right away.', 'If the booking date changes, you get "Date changed". Please reply again.']],
       ['On the cleaning day', ['"Tomorrow\'s cleaning" comes at 18:00 the day before, and "Today\'s cleaning" in the morning.', 'Press "Start cleaning" when you arrive and "Finished cleaning" when you are done. The owner gets the times.', 'You can choose a start time from check-out until "next check-in minus the cleaning time".']],
-      ['Reporting problems', ['For broken items, stains, things guests left or missing supplies, use "Report" on that cleaning to send a memo and photos (up to 30). Photos are deleted after 30 days.']],
+      ['Reporting problems', ['For broken items, stains, things guests left or missing supplies, use "Report" on that cleaning to send a memo and photos (up to 30). Photos are deleted after 30 days.', 'Before you start, use "Send before photos" to send how the room looks (up to 10 photos).']],
       ['Guide', ['Each property has photos of how it should look after cleaning, and notes. Take special care with items marked "!".']],
       ['Pay and purchases', ['"Pay" shows your cleaning fees and purchases for each month. After the month ends, press "I checked this statement" from the 1st of the next month.', 'If you buy something for cleaning, take a photo of the receipt and send it with "Add a purchase".']],
       ['If you need help', ['Write in this LINE chat or call the owner.']],
@@ -652,7 +660,7 @@
       ['เมื่อได้รับคำขอ', ['จะมี "ขอให้ทำความสะอาด" ส่งมาทาง LINE กด "ตกลง (เลือกเวลา)" แล้วเลือกเวลาเริ่ม หรือกด "ไปไม่ได้"', 'ตอบจาก "ตารางงาน" ในเมนูได้เช่นกัน ถ้าไม่ตอบภายใน 1 วัน จะมีข้อความเตือนอีกครั้ง']],
       ['เมื่อแผนเปลี่ยน', ['ถ้ากดตกลงแล้วแต่ไปไม่ได้ ให้เปิดงานนั้นใน "ตารางงาน" แล้วกด "ไปไม่ได้แล้ว" ระบบจะแจ้งเจ้าของ', 'ถ้าไปไม่ได้ในวันทำความสะอาด กรุณาโทรหาเจ้าของทาง LINE ทันที', 'ถ้าวันที่จองเปลี่ยน จะได้รับ "วันที่เปลี่ยนแล้ว" กรุณาตอบอีกครั้ง']],
       ['วันทำความสะอาด', ['"งานทำความสะอาดพรุ่งนี้" จะส่งมาเวลา 18:00 ของวันก่อน และ "งานทำความสะอาดวันนี้" ในตอนเช้า', 'กด "เริ่มทำความสะอาด" เมื่อไปถึง และกด "ทำความสะอาดเสร็จแล้ว" เมื่อเสร็จ เจ้าของจะได้รับเวลา', 'เลือกเวลาเริ่มได้ตั้งแต่เช็คเอาท์ จนถึง "เช็คอินถัดไป − เวลาที่ใช้ทำความสะอาด"']],
-      ['รายงานสิ่งที่พบ', ['ของเสีย รอยเปื้อน ของที่แขกลืม หรือของใช้ที่ขาด ส่งบันทึกและรูป (สูงสุด 30 รูป) ได้จาก "รายงาน" ของงานนั้น รูปจะถูกลบหลัง 30 วัน']],
+      ['รายงานสิ่งที่พบ', ['ของเสีย รอยเปื้อน ของที่แขกลืม หรือของใช้ที่ขาด ส่งบันทึกและรูป (สูงสุด 30 รูป) ได้จาก "รายงาน" ของงานนั้น รูปจะถูกลบหลัง 30 วัน', 'ก่อนเริ่มทำความสะอาด ส่งสภาพห้อง (สูงสุด 10 รูป) ได้จาก "ส่งรูปก่อนทำความสะอาด"']],
       ['คู่มือ', ['แต่ละบ้านมีรูปหลังทำความสะอาดและข้อควรระวัง ระวังเป็นพิเศษกับข้อที่มี "!"']],
       ['ค่าจ้างและเงินคืน', ['ดูค่าทำความสะอาดและเงินคืนรายเดือนได้ที่ "ค่าจ้าง" เมื่อจบเดือน ให้กด "ตรวจสอบรายละเอียดแล้ว" ได้ตั้งแต่วันที่ 1 ของเดือนถัดไป', 'ถ้าซื้อของเพื่อทำความสะอาด ให้ถ่ายรูปใบเสร็จแล้วส่งจาก "บันทึกการซื้อของ"']],
       ['เมื่อมีปัญหา', ['เขียนในแชท LINE นี้ หรือโทรหาเจ้าของ']],
@@ -661,7 +669,7 @@
       ['अनुरोध आएपछि', ['LINE मा "सरसफाइ अनुरोध" आउँछ। "ठीक छ (समय छान्नुहोस्)" थिचेर सुरु गर्ने समय छान्नुहोस्, वा "जान सक्दिनँ" थिच्नुहोस्।', 'मेनुको "तालिका" बाट पनि जवाफ दिन सकिन्छ। १ दिनसम्म जवाफ नदिए फेरि सूचना आउँछ।']],
       ['योजना बदलिएमा', ['"ठीक छ" थिचेपछि जान नसक्ने भएमा, "तालिका" मा त्यो काम खोलेर "अब आउन सक्दिन" थिच्नुहोस्। मालिकलाई जानकारी जान्छ।', 'सरसफाइकै दिन जान नसक्ने भएमा, तुरुन्तै LINE बाट मालिकलाई फोन गर्नुहोस्।', 'बुकिङको मिति बदलिएमा "मिति परिवर्तन भयो" आउँछ। फेरि जवाफ दिनुहोस्।']],
       ['सरसफाइको दिन', ['अघिल्लो दिन साँझ ६ बजे "भोलिको सरसफाइ" र बिहान "आजको सरसफाइ" आउँछ।', 'पुगेपछि "सरसफाइ सुरु", सकिएपछि "सरसफाइ सकियो" थिच्नुहोस्। मालिकलाई समय पुग्छ।', 'सुरु गर्ने समय चेक-आउटदेखि "अर्को चेक-इन − सरसफाइमा लाग्ने समय" सम्म छान्न सकिन्छ।']],
-      ['देखेका कुराको रिपोर्ट', ['बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान वा नपुगेका सामानबारे त्यो कामको "रिपोर्ट" बाट नोट र फोटो (३० वटासम्म) पठाउनुहोस्। फोटो ३० दिनपछि मेटिन्छ।']],
+      ['देखेका कुराको रिपोर्ट', ['बिग्रिएको सामान, दाग, पाहुनाले छोडेका सामान वा नपुगेका सामानबारे त्यो कामको "रिपोर्ट" बाट नोट र फोटो (३० वटासम्म) पठाउनुहोस्। फोटो ३० दिनपछि मेटिन्छ।', 'सरसफाइ सुरु गर्नुअघि "सरसफाइ अघिको फोटो पठाउनुहोस्" बाट कोठाको अवस्था (१० फोटोसम्म) पठाउन सकिन्छ।']],
       ['निर्देशिका', ['हरेक घरको सरसफाइपछिको फोटो र ध्यान दिनुपर्ने कुरा छन्। "!" भएका कुरामा विशेष ध्यान दिनुहोस्।']],
       ['तलब र खर्च फिर्ता', ['"तलब" मा हरेक महिनाको सरसफाइ शुल्क र खर्च हेर्न सकिन्छ। महिना सकिएपछि अर्को महिनाको १ गतेदेखि "विवरण जाँचें" थिच्नुहोस्।', 'सरसफाइका लागि केही किनेमा, रसिदको फोटो खिचेर "खरिद दर्ता गर्नुहोस्" बाट पठाउनुहोस्।']],
       ['समस्या परेमा', ['यही LINE च्याटमा लेख्नुहोस् वा मालिकलाई फोन गर्नुहोस्।']],
@@ -670,7 +678,7 @@
       ['Khi nhận được yêu cầu', ['LINE sẽ gửi "Yêu cầu dọn dẹp". Bấm "OK (chọn giờ)" rồi chọn giờ bắt đầu, hoặc bấm "Không đi được".', 'Bạn cũng có thể trả lời từ "Lịch" trong menu. Nếu 1 ngày không trả lời, sẽ có thông báo nhắc lại.']],
       ['Khi kế hoạch thay đổi', ['Nếu đã bấm OK nhưng không đi được nữa, mở lịch đó trong "Lịch" và bấm "Không đi được nữa". Chủ nhà sẽ được báo.', 'Nếu không đi được vào chính ngày dọn, hãy gọi ngay cho chủ nhà qua LINE.', 'Nếu ngày đặt phòng thay đổi, bạn sẽ nhận "Đã đổi ngày". Hãy trả lời lại.']],
       ['Ngày dọn dẹp', ['"Lịch dọn ngày mai" được gửi lúc 18:00 hôm trước, và "Lịch dọn hôm nay" vào buổi sáng.', 'Khi đến nơi bấm "Bắt đầu dọn", khi xong bấm "Đã dọn xong". Chủ nhà sẽ nhận được giờ.', 'Có thể chọn giờ bắt đầu từ giờ trả phòng đến "giờ nhận phòng tiếp theo − thời gian dọn".']],
-      ['Báo cáo điều nhận thấy', ['Đồ hỏng, vết bẩn, đồ khách để quên hoặc đồ dùng bị thiếu: dùng "Báo cáo" của lịch dọn đó để gửi ghi chú và ảnh (tối đa 30 ảnh). Ảnh sẽ bị xóa sau 30 ngày.']],
+      ['Báo cáo điều nhận thấy', ['Đồ hỏng, vết bẩn, đồ khách để quên hoặc đồ dùng bị thiếu: dùng "Báo cáo" của lịch dọn đó để gửi ghi chú và ảnh (tối đa 30 ảnh). Ảnh sẽ bị xóa sau 30 ngày.', 'Trước khi dọn, dùng "Gửi ảnh trước khi dọn" để gửi tình trạng phòng (tối đa 10 ảnh).']],
       ['Hướng dẫn', ['Mỗi nhà có ảnh sau khi dọn và các lưu ý. Hãy đặc biệt chú ý các mục có dấu "!".']],
       ['Tiền lương và hoàn tiền', ['Xem tiền dọn và tiền mua đồ theo tháng trong "Tiền lương". Hết tháng, từ ngày 1 tháng sau hãy bấm "Tôi đã kiểm tra bảng kê".', 'Nếu mua đồ để dọn dẹp, hãy chụp hóa đơn và gửi bằng "Đăng ký mua đồ".']],
       ['Khi cần giúp đỡ', ['Hãy viết vào cuộc trò chuyện LINE này hoặc gọi cho chủ nhà.']],
@@ -911,7 +919,7 @@
       if (j.asg.length >= 2) who.append(el('span', 'note', '2名(清掃料は折半)'));
       body.append(who);
       if (j.reports && j.reports.length) {
-        const rb = el('button', 'linkbtn', '📝 清掃員からの報告 ' + j.reports.length + '件(写真 ' + j.reports.reduce((n, r) => n + r.n, 0) + '枚)を見る'); rb.type = 'button'; rb.style.alignSelf = 'flex-start';
+        const rb = el('button', 'linkbtn', '📝 清掃員からの報告・Before ' + j.reports.length + '件(写真 ' + j.reports.reduce((n, r) => n + r.n, 0) + '枚)を見る'); rb.type = 'button'; rb.style.alignSelf = 'flex-start';
         rb.onclick = () => openReports(j); body.append(rb);
       }
       c.append(body);
@@ -937,10 +945,10 @@
     UI.sheet = () => {
       const bg = el('div', 'sheet-bg'); bg.onclick = (e) => { if (e.target === bg) { UI.sheet = null; render(); } };
       const sh = el('div', 'sheet'); sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true');
-      sh.append(el('h3', null, '清掃員からの報告'), el('div', 'muted', jaDate(j.date) + ' ' + j.prop));
+      sh.append(el('h3', null, '清掃員からの報告・Before'), el('div', 'muted', jaDate(j.date) + ' ' + j.prop));
       j.reports.forEach(r => {
         const it = el('div', 'rep-item');
-        it.append(el('div', 'note', (cl(r.c) ? cl(r.c).name + ' さん · ' : '') + fmtAt(r.at)));
+        it.append(el('div', 'note', (r.kind === 'before' ? '【Before(清掃前)】 ' : '【報告(清掃後)】 ') + (cl(r.c) ? cl(r.c).name + ' さん · ' : '') + fmtAt(r.at)));
         if (r.body) it.append(el('div', 'tx', r.body));
         if (r.photos.length) {
           const g = el('div', 'rep-photos');
@@ -1760,6 +1768,9 @@
     if (['today', 'jobs', 'guide', 'pay'].includes(want)) { UI.ctab = want; UI.payM = THIS_MONTH; } else cleanerStartTab();
     $('loading').hidden = true; $('wrap').hidden = false;
     render();
+    // opened from a LINE button: go straight to the photo screen of that cleaning
+    const qs = new URLSearchParams(location.search), rk = qs.get('report'), rj = S.jobs.find(j => String(j.id) === qs.get('r'));
+    if ((rk === 'before' || rk === 'after') && rj) openReport(rj, rk);
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !UI.sheet && Date.now() - loadedAt > 60000) saving = saving.then(staffReload).catch(e => console.error(e)); });
   }
   if (STAFF) bootStaff(); else boot();

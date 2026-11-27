@@ -46,7 +46,9 @@ await H.postback('U_anan', 'a=ok&r=1&c=' + C1 + '&t=03:00'); check(asg(1, C1).pl
 await H.postback('U_anan', 'a=start&r=1&c=' + C1); show(' start early'); check(asg(1, C1).status === 'ok', 'not started early');
 DB.cleaning_messages.push({ id: 105, audience: 'cleaner', cleaner_id: C1, reservation_id: 3, kind: 'today', body: 'x', delivered_at: null });
 await H.dispatch(); show(' today msg');
+{ const b = JSON.stringify(H.lastLine().body); check(b.includes('a=start') && b.includes('report=before&r=3'), 'today: start title, start + before buttons'); }
 await H.postback('U_anan', 'a=start&r=3&c=' + C1); show(' start'); check(asg(3, C1).status === 'work', 'started');
+{ const b = JSON.stringify(LINE.filter((l) => l.path === 'reply').pop().body); check(b.indexOf('report=after&r=3') < b.indexOf('a=done'), 'finish card: report button above finish'); }
 console.log(' owner got:', LINE.filter((l) => l.path === 'multicast').pop().body.messages[0].text);
 await H.postback('U_anan', 'a=start&r=3&c=' + C1); show(' start again');
 await H.postback('U_anan', 'a=done&r=3&c=' + C1); show(' done'); check(asg(3, C1).status === 'done', 'done');
@@ -59,7 +61,7 @@ DB.cleaners[1].line_user_id = 'U_sato';
 await H.postback('U_sato', 'a=ok&r=3&c=' + C2 + '&t=11:00');
 const sameDay = LINE.filter((l) => l.path === 'reply').pop();
 console.log(' same-day ok reply:', sameDay.body.messages.map(H.textOf).join(' // '));
-check(sameDay.body.messages.length === 2 && JSON.stringify(sameDay.body.messages[1]).includes('a=start'), 'same-day OK has start button');
+check(sameDay.body.messages.length === 2 && JSON.stringify(sameDay.body.messages[1]).includes('a=start') && JSON.stringify(sameDay.body.messages[1]).includes('report=before'), 'same-day OK has start + before buttons');
 DB.cleaners[1].line_user_id = null;
 
 // 6. can't go

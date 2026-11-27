@@ -62,7 +62,7 @@ async function load(me: Me) {
     db("cleaning_assignments?cleaner_id=eq." + me.id + "&job_date=gte." + FROM + "&select=*"),
     db("cleaning_expenses?cleaner_id=eq." + me.id + "&purchased_on=gte." + FROM + "&order=created_at.asc&select=*"),
     db("pay_confirms?cleaner_id=eq." + me.id + "&select=*"),
-    db("cleaning_reports?cleaner_id=eq." + me.id + "&created_at=gte." + plusDaysISO(-14) + "&order=created_at.asc&select=reservation_id,body,photos,created_at"),
+    db("cleaning_reports?cleaner_id=eq." + me.id + "&created_at=gte." + plusDaysISO(-14) + "&order=created_at.asc&select=reservation_id,body,photos,created_at,kind"),
   ]);
   const memberIds: number[] = memberRows.map((x: { property_id: number }) => x.property_id);
   const resIds: number[] = mine.map((a: { reservation_id: number }) => a.reservation_id);
@@ -88,7 +88,7 @@ async function load(me: Me) {
     return {
       id: a.reservation_id, prop: nameOf[r.property_id], date: a.job_date, nextIn: next ? next.check_in : null, guests: next ? next.guests : null,
       asg: [{ c: me.id, st: a.status, plan: a.plan_time, start: a.start_time, end: a.end_time, sent: a.sent_on, fee: a.fee_override, feeNote: a.fee_note, rateDone: a.rate_at_done }, ...co],
-      reports: reps.filter((x: { reservation_id: number }) => x.reservation_id === a.reservation_id).map((x: { body: string; photos: string[]; created_at: string }) => ({ body: x.body, n: x.photos.length, at: x.created_at })),
+      reports: reps.filter((x: { reservation_id: number }) => x.reservation_id === a.reservation_id).map((x: { body: string; photos: string[]; created_at: string; kind: string }) => ({ body: x.body, n: x.photos.length, at: x.created_at, kind: x.kind })),
     };
   }).sort((x: { date: string; prop: string }, y: { date: string; prop: string }) => x.date.localeCompare(y.date) || x.prop.localeCompare(y.prop));
 
@@ -147,8 +147,9 @@ async function handle(me: Me, action: string, b: Record<string, any>) {
   }
   if (action === "report") {
     const r = Number(b.r), body = String(b.body ?? "").trim().slice(0, 1000);
+    const kind = b.kind === "before" ? "before" : "after"; // before: the room before cleaning (up to 10 photos)
     const photos: string[] = Array.isArray(b.photos) ? b.photos.map(String) : [];
-    if (!Number.isInteger(r) || photos.length > 30 || (!body && !photos.length)) return { ok: false, code: "bad" };
+    if (!Number.isInteger(r) || photos.length > (kind === "before" ? 10 : 30) || (!body && !photos.length)) return { ok: false, code: "bad" };
     if (photos.some((x) => !new RegExp("^reports/" + me.id + "/[0-9a-f-]{36}\\.jpg$").test(x))) return { ok: false, code: "bad" };
     const a = await db("cleaning_assignments?reservation_id=eq." + r + "&cleaner_id=eq." + me.id + "&select=job_date,reservation_id");
     if (!a.length) return { ok: false, code: "gone" };
@@ -156,9 +157,9 @@ async function handle(me: Me, action: string, b: Record<string, any>) {
     if (a[0].job_date > today || a[0].job_date < plusDaysISO(-3).slice(0, 10)) return { ok: false, code: "gone" };
     const res = await db("reservations?id=eq." + r + "&select=property_id");
     const p = res.length ? await db("properties?id=eq." + res[0].property_id + "&select=name") : [];
-    await db("cleaning_reports", "POST", { reservation_id: r, cleaner_id: me.id, body, photos });
-    await toOwners("【報告】" + me.name + " さん " + jaDate(a[0].job_date) + " " + (p[0]?.name ?? "") + (body ? "\n" + body : "") +
-      (photos.length ? "\n(写真 " + photos.length + "枚。アプリの清掃の詳細で見られます)" : ""), "report", r, me.id);
+    await db("cleaning_reports", "POST", { reservation_id: r, cleaner_id: me.id, body, photos, kind });
+    await toOwners((kind === "before" ? "【Before】" : "【報告】") + me.name + " さん " + jaDate(a[0].job_date) + " " + (p[0]?.name ?? "") + (body ? "\n" + body : "") +
+      (photos.length ? "\n(写真 " + photos.length + "枚。アプリの清掃の詳細で見られます)" : ""), kind === "before" ? "before" : "report", r, me.id);
     return { ok: true };
   }
 

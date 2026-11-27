@@ -55,8 +55,12 @@ console.log(' owner got:', LINE.filter((l) => l.path === 'multicast').pop().body
 r = await H.api(T, { action: 'report', r: 3, body: 'x', photos: ['reports/' + C2 + '/0123abcd-0123-4567-89ab-0123456789ab.jpg'] }); check(r.body.code === 'bad', 'cannot use another cleaner\'s photo in a report');
 r = await H.api(T, { action: 'report', r: 2, body: 'x', photos: [] }); check(r.body.code === 'gone', 'cannot report on another cleaner\'s job');
 r = await H.api(T, { action: 'report', r: 1, body: 'x', photos: [] }); check(r.body.code === 'gone', 'cannot report on a future job');
+const eleven = Array.from({ length: 11 }, () => good);
+r = await H.api(T, { action: 'report', r: 3, kind: 'before', body: '', photos: eleven }); check(r.body.code === 'bad', 'before: more than 10 photos refused');
+r = await H.api(T, { action: 'report', r: 3, kind: 'before', body: 'ゴミが多い', photos: [good] }); check(r.body.ok && DB.cleaning_reports.at(-1).kind === 'before', 'before report saved');
+console.log(' owner got:', LINE.filter((l) => l.path === 'multicast').pop().body.messages[0].text.replace(/\n/g, ' / '));
 const L2 = (await H.api(T, { action: 'load' })).body.data;
-check(L2.jobs.find((j) => j.id === 3).reports.length === 1, 'reports come back on load');
+check(L2.jobs.find((j) => j.id === 3).reports.length === 2 && L2.jobs.find((j) => j.id === 3).reports[1].kind === 'before', 'reports come back on load with kind');
 check(L2.props.find((p) => p.name === 'Laughter').dur === 180, 'cleaning time on load');
 console.log('log:', DB.cleaning_log.map((l) => l.body).join(' / '));
 console.log(fails ? fails + ' FAILED' : 'ALL STAFF CHECKS PASSED');

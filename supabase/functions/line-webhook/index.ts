@@ -6,7 +6,7 @@
 // Secrets: LINE_CHANNEL_SECRET(署名の確認用)、LINE_CHANNEL_ACCESS_TOKEN(返信用)
 // LINE からの呼び出しなので verify_jwt は false。代わりに署名(X-Line-Signature)を確認する。
 import { cantText } from "../_shared/actions.ts";
-import { asLang, bubble, dateLabel, db, jaDate, lateMinutes, lineApi, LINE_TOKEN, loadJob, nowJST, pb, timeChoices, tr, type Lang } from "../_shared/line.ts";
+import { asLang, dateLabel, db, finishBubble, jaDate, lateMinutes, lineApi, LINE_TOKEN, loadJob, nowJST, pb, startBubble, timeChoices, tr, type Lang } from "../_shared/line.ts";
 
 const SECRET = Deno.env.get("LINE_CHANNEL_SECRET") ?? "";
 
@@ -106,8 +106,7 @@ async function onPostback(token: string, lineUserId: string, data: string) {
     const got = text(tr("gotOk", lang, { d: dateLabel(j.date, lang), p: j.prop, t }));
     // accepted on the cleaning day itself (after the 7:55 morning message): give the start button now
     if (j.date === now.date) {
-      return reply(token, [got, bubble(tr("todayTitle", lang), [dateLabel(j.date, lang) + " " + j.prop, tr("plan", lang, { t }), tr("todayText", lang)],
-        [{ label: tr("btnStart", lang), data: pb("start", r, cId), primary: true }])]);
+      return reply(token, [got, startBubble(j.date, j.prop, t, r, cId, lang)]);
     }
     return reply(token, [got]);
   }
@@ -118,8 +117,7 @@ async function onPostback(token: string, lineUserId: string, data: string) {
     await toOwners(cantText(who, where, sameDay), "cant", r, cId);
     return reply(token, [text(tr("gotCant", lang) + (sameDay ? "\n" + tr("urgentCall", lang) : ""))]);
   }
-  const doneButton = () => bubble(tr("todayTitle", lang), [dateLabel(j.date!, lang) + " " + j.prop, tr("gotStart", lang, { t: j.asg!.start_time ?? now.hm })],
-    [{ label: tr("btnDone", lang), data: pb("done", r, cId), primary: true }]);
+  const doneButton = () => finishBubble(j.date!, j.prop, j.asg!.start_time ?? now.hm, r, cId, lang);
   if (a === "start") {
     if (st === "work") return reply(token, [doneButton()]); // pressed again: show the finish button again
     if (!["wait", "ok"].includes(st)) return reply(token, [text(tr("gone", lang))]);

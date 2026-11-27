@@ -3,7 +3,7 @@
 // - 呼び出しの確認は合言葉(cleaning_dispatch.key)。LINE やブラウザからは呼ばれないので verify_jwt は false
 // - 清掃員へ:依頼・催促・日程変更・取り消し・明日の清掃(前日18時)・本日の清掃(その人の言語、ボタン付き)
 // - オーナーへ:連携しているオーナー全員に、記録された文面(日本語)をそのまま送る
-import { asLang, bubble, db, jobLines, lineApi, loadJob, pb, replyButtons, rpc, tr } from "../_shared/line.ts";
+import { asLang, bubble, db, jobLines, lineApi, loadJob, pb, replyButtons, reportUri, rpc, tr } from "../_shared/line.ts";
 
 type Msg = { id: number; audience: string; cleaner_id: string | null; reservation_id: number | null; kind: string; body: string };
 
@@ -36,7 +36,8 @@ async function sendToCleaner(m: Msg) {
       const lines = jobLines(j, lang);
       if (j.asg.plan_time) lines.push(tr("plan", lang, { t: j.asg.plan_time }));
       lines.push(tr("todayText", lang));
-      msg = bubble(tr("todayTitle", lang), lines, [{ label: tr("btnStart", lang), data: pb("start", j.reservationId, m.cleaner_id!), primary: true }]);
+      msg = bubble(tr("startTitle", lang), lines, [{ label: tr("btnStart", lang), data: pb("start", j.reservationId, m.cleaner_id!), primary: true },
+        { label: tr("btnBefore", lang), uri: reportUri(j.reservationId, "before") }]);
     } else if (m.kind === "tomorrow") {
       // 18:00 the day before: a reminder only (no "can't go" button: the owner does not want easy last-minute cancels)
       if (st !== "ok") return mark(m.id, "stale");

@@ -144,6 +144,7 @@
 - LINE で送れなかったお知らせ(send_status failed、7日以内)をオーナー画面の通知欄に常に表示。上限超え(429 / monthly limit)はその旨を表示。
 - フォロー欄に「担当なし」の清掃(誰にも依頼していない)も出す。
 - 清掃員のガイドに「使い方」(5か国語、`HOWTO`)。
+- 11/27 当日の LINE:朝の「本日の清掃開始」(`startTitle`)=「清掃を始める」+「Beforeの写真を送る」、開始後の「本日の清掃完了」(`doneTitle`)=「報告する(メモ・写真)」+「清掃が終わった」(`startBubble` / `finishBubble`)。写真のボタンは uri アクションで LIFF を `?tab=today&report=before|after&r=<予約ID>` で開き、アプリが直接その報告画面を開く。Before は `cleaning_reports.kind='before'`(写真10枚まで、オーナーへ【Before】)、清掃後は `after`(30枚)。マイグレーション `20261127_reports_before.sql`。LIFF の URL は Secret `LIFF_URL`(なければ試験用)。アプリでは当日の OK/清掃中に「Beforeの写真を送る」、清掃中/完了後に「報告する」。
 - 依頼を送る日数の選択肢に14日・21日を追加(運用は30日のまま、オーナー決定)。
 - 配置の注意:staff-api と line-webhook は `_shared/line.ts` の必要部分だけを一緒にアップロードした(line-send は全体)。リポジトリの `_shared/line.ts` が正。
 - 動作確認:`tools/linetest/run.mjs`・`run_staff.mjs`(前日のお知らせ・ブロック・所要時間・当日の行けない・報告を追加)。
